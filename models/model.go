@@ -1,7 +1,29 @@
 // Package models
 package models
 
-import "time"
+import (
+	"strings"
+	"time"
+)
+
+const sbbDateLayout = "2006-01-02T15:04:05-0700"
+
+type SBBDateLayout struct {
+	time.Time
+}
+
+func (st *SBBDateLayout) UnmarshalJSON(b []byte) error {
+	s := strings.Trim(string(b), "\"")
+	if s == "null" || s == "" {
+		return nil
+	}
+	t, err := time.Parse(sbbDateLayout, s)
+	if err != nil {
+		return err
+	}
+	st.Time = t
+	return nil
+}
 
 type Station struct {
 	Name        string  `json:"name"`
@@ -11,15 +33,15 @@ type Station struct {
 
 type Connection struct {
 	FromData struct {
-		Station   Station   `json:"station"`
-		Departure time.Time `json:"departure"`
-		Delay     int       `json:"delay"`
-		Platform  string    `json:"platform"`
+		Station   Station       `json:"station"`
+		Departure SBBDateLayout `json:"departure"`
+		Delay     int           `json:"delay"`
+		Platform  string        `json:"platform"`
 	} `json:"from"`
 
 	ToData struct {
-		Station Station   `json:"station"`
-		Arrival time.Time `json:"arrival"`
+		Station Station       `json:"station"`
+		Arrival SBBDateLayout `json:"arrival"`
 	} `json:"to"`
 
 	Duration  string `json:"duration"`
