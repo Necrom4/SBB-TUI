@@ -6,14 +6,23 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"time"
 
 	"sbb-tui/models"
 )
 
 func FetchConnections(from string, to string) ([]models.Connection, error) {
-	apiURL := fmt.Sprintf("https://transport.opendata.ch/v1/connections?from=%s&to=%s&time=06:00&limit=4",
+	now := time.Now()
+	date := now.Format("2006-01-02")
+	timeStr := now.Format("15:04")
+
+	apiURL := fmt.Sprintf(
+		"https://transport.opendata.ch/v1/connections?from=%s&to=%s&date=%s&time=%s&limit=4",
 		url.QueryEscape(from),
-		url.QueryEscape(to))
+		url.QueryEscape(to),
+		date,
+		timeStr,
+	)
 
 	resp, err := http.Get(apiURL)
 	if err != nil {
