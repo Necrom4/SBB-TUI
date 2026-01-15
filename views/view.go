@@ -1,61 +1,52 @@
 // Package views
 package views
 
-// A simple example demonstrating the use of multiple text input components
-// from the Bubbles component library.
-
 import (
 	"fmt"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/cursor"
+	"sbb-tui/api"
+	"sbb-tui/models"
+
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
 
 var (
-	focusedStyle        = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
-	blurredStyle        = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
-	cursorStyle         = focusedStyle
-	noStyle             = lipgloss.NewStyle()
-	helpStyle           = blurredStyle
-	cursorModeHelpStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("244"))
-
-	focusedButton = focusedStyle.Render("[ Submit ]")
-	blurredButton = fmt.Sprintf("[ %s ]", blurredStyle.Render("Submit"))
+	focusedStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
+	highlightStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("250"))
+	noStyle        = lipgloss.NewStyle()
 )
 
+type DataMsg []models.Connection
+
 type model struct {
-	focusIndex int
-	inputs     []textinput.Model
-	cursorMode cursor.Mode
+	focusIndex  int
+	inputs      []textinput.Model
+	connections []models.Connection
+	loading     bool
 }
 
 func InitialModel() model {
 	m := model{
-		inputs: make([]textinput.Model, 3),
+		inputs: make([]textinput.Model, 2),
 	}
 
 	var t textinput.Model
 	for i := range m.inputs {
 		t = textinput.New()
-		t.Cursor.Style = cursorStyle
 		t.CharLimit = 32
+		t.Width = 64
 
 		switch i {
 		case 0:
-			t.Placeholder = "Nickname"
+			t.Placeholder = "From"
 			t.Focus()
 			t.PromptStyle = focusedStyle
 			t.TextStyle = focusedStyle
 		case 1:
-			t.Placeholder = "Email"
-			t.CharLimit = 64
-		case 2:
-			t.Placeholder = "Password"
-			t.EchoMode = textinput.EchoPassword
-			t.EchoCharacter = '•'
+			t.Placeholder = "To"
 		}
 
 		m.inputs[i] = t
@@ -75,51 +66,33 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "ctrl+c", "esc":
 			return m, tea.Quit
 
-		// Change cursor mode
-		case "ctrl+r":
-			m.cursorMode++
-			if m.cursorMode > cursor.CursorHide {
-				m.cursorMode = cursor.CursorBlink
-			}
-			cmds := make([]tea.Cmd, len(m.inputs))
-			for i := range m.inputs {
-				cmds[i] = m.inputs[i].Cursor.SetMode(m.cursorMode)
-			}
-			return m, tea.Batch(cmds...)
+		case "enter":
+			m.loading = true
+			return m, m.searchCmd()
 
-		// Set focus to next input
-		case "tab", "shift+tab", "enter", "up", "down":
+		case "tab", "shift+tab", "up", "down":
 			s := msg.String()
 
-			// Did the user press enter while the submit button was focused?
-			// If so, exit.
-			if s == "enter" && m.focusIndex == len(m.inputs) {
-				return m, tea.Quit
-			}
-
-			// Cycle indexes
 			if s == "up" || s == "shift+tab" {
 				m.focusIndex--
 			} else {
 				m.focusIndex++
 			}
 
-			if m.focusIndex > len(m.inputs) {
+			if m.focusIndex >= len(m.inputs) {
 				m.focusIndex = 0
 			} else if m.focusIndex < 0 {
-				m.focusIndex = len(m.inputs)
+				m.focusIndex = len(m.inputs) - 1
 			}
 
 			cmds := make([]tea.Cmd, len(m.inputs))
 			for i := 0; i <= len(m.inputs)-1; i++ {
 				if i == m.focusIndex {
-					// Set focused state
 					cmds[i] = m.inputs[i].Focus()
 					m.inputs[i].PromptStyle = focusedStyle
 					m.inputs[i].TextStyle = focusedStyle
 					continue
 				}
-				// Remove focused state
 				m.inputs[i].Blur()
 				m.inputs[i].PromptStyle = noStyle
 				m.inputs[i].TextStyle = noStyle
@@ -127,9 +100,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			return m, tea.Batch(cmds...)
 		}
+
+	case DataMsg:
+		m.loading = false
+		m.connections = msg
+		return m, nil
 	}
 
-	// Handle character input and blinking
 	cmd := m.updateInputs(msg)
 
 	return m, cmd
@@ -138,8 +115,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m *model) updateInputs(msg tea.Msg) tea.Cmd {
 	cmds := make([]tea.Cmd, len(m.inputs))
 
-	// Only text inputs with Focus() set will respond, so it's safe to simply
-	// update all of them here without any further logic.
 	for i := range m.inputs {
 		m.inputs[i], cmds[i] = m.inputs[i].Update(msg)
 	}
@@ -150,22 +125,38 @@ func (m *model) updateInputs(msg tea.Msg) tea.Cmd {
 func (m model) View() string {
 	var b strings.Builder
 
+	// Render inputs
 	for i := range m.inputs {
 		b.WriteString(m.inputs[i].View())
-		if i < len(m.inputs)-1 {
-			b.WriteRune('\n')
+		b.WriteRune('\n')
+	}
+
+	// Render results
+	if m.loading {
+		b.WriteString(highlightStyle.Render(" Loading..."))
+	} else {
+		for _, c := range m.connections {
+			depTime := c.FromData.Departure.Format("15:04")
+			arrTime := c.ToData.Arrival.Format("15:04")
+
+			line := fmt.Sprintf(" %s → %s  [%s]  %v transfers\n",
+				depTime, arrTime, c.Duration, c.Transfers)
+			b.WriteString(line)
 		}
 	}
 
-	button := &blurredButton
-	if m.focusIndex == len(m.inputs) {
-		button = &focusedButton
-	}
-	fmt.Fprintf(&b, "\n\n%s\n\n", *button)
-
-	b.WriteString(helpStyle.Render("cursor mode is "))
-	b.WriteString(cursorModeHelpStyle.Render(m.cursorMode.String()))
-	b.WriteString(helpStyle.Render(" (ctrl+r to change style)"))
-
 	return b.String()
+}
+
+func (m model) searchCmd() tea.Cmd {
+	return func() tea.Msg {
+		from := m.inputs[0].Value()
+		to := m.inputs[1].Value()
+
+		results, err := api.FetchConnections(from, to)
+		if err != nil {
+			return nil
+		}
+		return DataMsg(results)
+	}
 }
