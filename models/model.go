@@ -27,8 +27,8 @@ func (st *SBBDateLayout) UnmarshalJSON(b []byte) error {
 
 type Station struct {
 	Name        string  `json:"name"`
-	CoordinateX float64 `json:"x"`
-	CoordinateY float64 `json:"y"`
+	CoordinateX float64 `json:"coordinate.x"`
+	CoordinateY float64 `json:"coordinate.y"`
 }
 
 type Connection struct {
@@ -48,10 +48,15 @@ type Connection struct {
 	Transfers int    `json:"transfers"`
 }
 
-type Selection struct {
-	From string
-	To   string
-	Via  string
+type Input struct {
+	From            string
+	To              string
+	Via             string
+	Date            time.Time
+	Time            time.Time
+	IsArrivalTime   bool
+	Transportations string
+	Limit           int
 }
 
 type APIResponse struct {
