@@ -14,9 +14,15 @@ import (
 )
 
 var (
-	focusedStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
-	highlightStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("250"))
-	noStyle        = lipgloss.NewStyle()
+	sbbWhite     = lipgloss.NewStyle()
+	sbbDarkWhite = lipgloss.NewStyle().Foreground(lipgloss.Color("#F6F6F6"))
+	sbbMidGray   = lipgloss.NewStyle().Foreground(lipgloss.Color("#333333"))
+	sbbDarkGray  = lipgloss.NewStyle().Foreground(lipgloss.Color("#212121"))
+	sbbBlack     = lipgloss.NewStyle().Foreground(lipgloss.Color("#141414"))
+	sbbRed       = lipgloss.NewStyle().Foreground(lipgloss.Color("#D82E20"))
+	sbbBlue      = lipgloss.NewStyle().Foreground(lipgloss.Color("#2E3279"))
+
+	sbbTitle = lipgloss.NewStyle().Padding(1).MarginBottom(1).Bold(true).Foreground(lipgloss.Color("#F6F6F6")).Background(lipgloss.Color("#D82E20"))
 )
 
 type DataMsg []models.Connection
@@ -43,8 +49,7 @@ func InitialModel() model {
 		case 0:
 			t.Placeholder = "From"
 			t.Focus()
-			t.PromptStyle = focusedStyle
-			t.TextStyle = focusedStyle
+			t.PromptStyle = sbbRed
 		case 1:
 			t.Placeholder = "To"
 		}
@@ -89,13 +94,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			for i := 0; i <= len(m.inputs)-1; i++ {
 				if i == m.focusIndex {
 					cmds[i] = m.inputs[i].Focus()
-					m.inputs[i].PromptStyle = focusedStyle
-					m.inputs[i].TextStyle = focusedStyle
+					m.inputs[i].PromptStyle = sbbRed
 					continue
 				}
 				m.inputs[i].Blur()
-				m.inputs[i].PromptStyle = noStyle
-				m.inputs[i].TextStyle = noStyle
+				m.inputs[i].PromptStyle = sbbWhite
 			}
 
 			return m, tea.Batch(cmds...)
@@ -124,6 +127,9 @@ func (m *model) updateInputs(msg tea.Msg) tea.Cmd {
 
 func (m model) View() string {
 	var b strings.Builder
+	// ↮
+	b.WriteString(sbbTitle.Render(" SBB timetables <+> "))
+	b.WriteRune('\n')
 
 	// Render inputs
 	for i := range m.inputs {
@@ -132,8 +138,9 @@ func (m model) View() string {
 	}
 
 	// Render results
+	b.WriteRune('\n')
 	if m.loading {
-		b.WriteString(highlightStyle.Render(" Loading..."))
+		b.WriteString(sbbMidGray.Render(" Loading..."))
 	} else {
 		for _, c := range m.connections {
 			depTime := c.FromData.Departure.Format("15:04")
