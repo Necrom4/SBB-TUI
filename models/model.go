@@ -31,6 +31,15 @@ type Station struct {
 	CoordinateY float64 `json:"coordinate.y"`
 }
 
+type Section struct {
+	Journey struct {
+		Category string `json:"category"`
+		Number   string `json:"number"`
+		Operator string `json:"operator"`
+		To       string `json:"to"`
+	} `json:"journey"`
+}
+
 type Connection struct {
 	FromData struct {
 		Station   Station       `json:"station"`
@@ -40,12 +49,16 @@ type Connection struct {
 	} `json:"from"`
 
 	ToData struct {
-		Station Station       `json:"station"`
-		Arrival SBBDateLayout `json:"arrival"`
+		Station  Station       `json:"station"`
+		Arrival  SBBDateLayout `json:"arrival"`
+		Platform string        `json:"platform"`
 	} `json:"to"`
 
-	Duration  string `json:"duration"`
-	Transfers int    `json:"transfers"`
+	Duration    string    `json:"duration"`
+	Transfers   int       `json:"transfers"`
+	Capacity1st string    `json:"capacity1st"`
+	Capacity2nd string    `json:"capacity2nd"`
+	Sections    []Section `json:"sections"`
 }
 
 type Input struct {
