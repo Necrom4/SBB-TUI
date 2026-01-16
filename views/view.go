@@ -84,15 +84,18 @@ func InitialModel() model {
 		switch i {
 		case 0:
 			t.Placeholder = "From"
+			t.Prompt = " "
 			t.Focus()
-			t.PromptStyle = lipgloss.NewStyle().Foreground(sbbRed)
 		case 1:
 			t.Placeholder = "To"
+			t.Prompt = " "
 		case 2:
 			t.Placeholder = now.Format("2006-01-02")
+			t.Prompt = " "
 			t.Width = 12
 		case 3:
 			t.Placeholder = now.Format("15:04")
+			t.Prompt = " "
 			t.Width = 7
 		}
 		m.inputs[i] = t
