@@ -41,6 +41,13 @@ var (
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(sbbMidGray).
 			Padding(0, 1)
+
+	titleStyle = lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(sbbRed).
+			Bold(true).
+			Foreground(sbbWhite).
+			Background(sbbRed)
 )
 
 type DataMsg []models.Connection
@@ -114,7 +121,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
-		inputWidth := (m.width / 4) - 2
+		inputWidth := ((m.width - 2 - 77) / 2)
 		m.inputs[0].Width = inputWidth
 		m.inputs[1].Width = inputWidth
 
@@ -222,6 +229,8 @@ func (m model) View() string {
 		headerItems = append(headerItems, headerItem(i))
 	}
 
+	headerItems = append(headerItems, titleStyle.Render(" SBB TIMETABLES <+> "))
+
 	header := lipgloss.JoinHorizontal(lipgloss.Top, headerItems...)
 
 	var results strings.Builder
@@ -256,7 +265,7 @@ func (m model) View() string {
 		lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(sbbDarkRed).
-			Padding(0, 1).Width(m.width-2).Height(m.height-5).Render(results.String()),
+			Width(m.width-2).Height(m.height-5).Render(results.String()),
 	)
 }
 
