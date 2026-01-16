@@ -10,8 +10,10 @@ import (
 )
 
 func main() {
-	if _, err := tea.NewProgram(views.InitialModel()).Run(); err != nil {
-		fmt.Printf("could not start program: %s\n", err)
+	m := views.InitialModel()
+
+	if _, err := tea.NewProgram(m, tea.WithAltScreen()).Run(); err != nil {
+		fmt.Println("could not run program:", err)
 		os.Exit(1)
 	}
 }

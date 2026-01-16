@@ -28,10 +28,11 @@ var (
 type DataMsg []models.Connection
 
 type model struct {
-	focusIndex  int
-	inputs      []textinput.Model
-	connections []models.Connection
-	loading     bool
+	width, height int
+	focusIndex    int
+	inputs        []textinput.Model
+	connections   []models.Connection
+	loading       bool
 }
 
 func InitialModel() model {
@@ -42,7 +43,7 @@ func InitialModel() model {
 	var t textinput.Model
 	for i := range m.inputs {
 		t = textinput.New()
-		t.CharLimit = 32
+		t.CharLimit = 36
 		t.Width = 64
 
 		switch i {
@@ -66,6 +67,12 @@ func (m model) Init() tea.Cmd {
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		m.height = msg.Height
+		// Update input widths to fill half the screen each
+		m.inputs[0].Width = (m.width / 2) - 6
+		m.inputs[1].Width = (m.width / 2) - 6
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "ctrl+c", "esc":
@@ -75,10 +82,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.loading = true
 			return m, m.searchCmd()
 
-		case "tab", "shift+tab", "up", "down":
+		case "tab", "shift+tab", "left", "right":
 			s := msg.String()
 
-			if s == "up" || s == "shift+tab" {
+			if s == "left" || s == "shift+tab" {
 				m.focusIndex--
 			} else {
 				m.focusIndex++
@@ -126,33 +133,86 @@ func (m *model) updateInputs(msg tea.Msg) tea.Cmd {
 }
 
 func (m model) View() string {
-	var b strings.Builder
-	// ↮
-	b.WriteString(sbbTitle.Render(" SBB timetables <+> "))
-	b.WriteRune('\n')
-
-	// Render inputs
-	for i := range m.inputs {
-		b.WriteString(m.inputs[i].View())
-		b.WriteRune('\n')
+	if m.width == 0 {
+		return "Initializing..."
 	}
 
-	// Render results
-	b.WriteRune('\n')
+	// 1. Define Styles
+	headerHeight := 3
+	resultsHeight := m.height - headerHeight - 3 // Remaining space
+
+	columnWidth := m.width / 4
+
+	// Style for the input boxes
+	inputBoxStyle := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(sbbMidGray.GetForeground()).
+		Width(columnWidth - 1).
+		Height(1)
+
+	if m.focusIndex < 2 { // If an input is focused, color its border red
+		// We'll apply this logic dynamically below
+	}
+
+	// Style for the results area
+	resultsStyle := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(sbbRed.GetForeground()).
+		Width(m.width-2).
+		Height(resultsHeight).
+		Padding(0, 1)
+
+	// 2. Prepare the Input Boxes
+	fromStyle := inputBoxStyle
+	if m.focusIndex == 0 {
+		fromStyle = fromStyle.BorderForeground(sbbRed.GetForeground())
+	}
+	fromView := fromStyle.Render(m.inputs[0].View())
+
+	toStyle := inputBoxStyle
+	if m.focusIndex == 1 {
+		toStyle = toStyle.BorderForeground(sbbRed.GetForeground())
+	}
+	toView := toStyle.Render(m.inputs[1].View())
+
+	// Join them horizontally
+	header := lipgloss.JoinHorizontal(lipgloss.Top, fromView, toView)
+
+	// 3. Prepare the Results
+	var results strings.Builder
 	if m.loading {
-		b.WriteString(sbbMidGray.Render(" Loading..."))
+		results.WriteString("\n  Searching connections...")
+	} else if len(m.connections) == 0 {
+		results.WriteString("\n  Enter stations above to see timetables")
 	} else {
 		for _, c := range m.connections {
-			depTime := c.FromData.Departure.Format("15:04")
-			arrTime := c.ToData.Arrival.Format("15:04")
+			dep := c.FromData.Departure.Local().Format("15:04")
+			arr := c.ToData.Arrival.Local().Format("15:04")
 
-			line := fmt.Sprintf(" %s → %s  [%s]  %v transfers\n",
-				depTime, arrTime, c.Duration, c.Transfers)
-			b.WriteString(line)
+			// Simple slice to clean duration 00d00:19:00 -> 19 min
+			durRaw := strings.Split(c.Duration, ":")
+			dur := durRaw[1] + " min"
+			if durRaw[0] != "00d00" {
+				dur = durRaw[0][3:] + "h " + durRaw[1] + "m"
+			}
+
+			fmt.Fprintf(&results, "\n %s  %s  %s  %s  (%v x)\n",
+				sbbWhite.Bold(true).Render(dep),
+				sbbRed.Render("→"),
+				sbbWhite.Bold(true).Render(arr),
+				sbbMidGray.Render(dur),
+				c.Transfers,
+			)
 		}
 	}
 
-	return b.String()
+	// 4. Final Assembly
+	return lipgloss.JoinVertical(
+		lipgloss.Left,
+		sbbTitle.Render(" SBB RAILWAYS "),
+		header,
+		resultsStyle.Render(results.String()),
+	)
 }
 
 func (m model) searchCmd() tea.Cmd {
