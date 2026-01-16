@@ -250,12 +250,15 @@ func (m model) View() string {
 				dur = parts[0][3:] + "h " + parts[1] + "m"
 			}
 
-			fmt.Fprintf(&results, "\n %s  %s  %s  %s  (%v x)\n",
+			fmt.Fprintf(&results, "\n\n  %s %s %s  %s\n\n  %s  %s  %s\n\n  %v\n\n",
+				lipgloss.NewStyle().Background(sbbBlue).Foreground(sbbWhite).Render("  "),
+				lipgloss.NewStyle().Background(sbbRed).Foreground(sbbWhite).Bold(true).Render(c.Sections[0].Journey.Category+c.Sections[0].Journey.Number),
+				lipgloss.NewStyle().Background(sbbWhite).Foreground(sbbBlack).Render(c.Sections[0].Journey.Operator),
+				noStyle.Render(c.Sections[0].Journey.To),
 				noStyle.Bold(true).Render(dep),
-				lipgloss.NewStyle().Foreground(sbbRed).Render("→"),
+				noStyle.Bold(true).Render("●"+strings.Repeat("──○", c.Transfers)),
 				noStyle.Bold(true).Render(arr),
-				lipgloss.NewStyle().Foreground(sbbLightBlue).Render(dur),
-				c.Transfers,
+				noStyle.Render(dur),
 			)
 		}
 	}
