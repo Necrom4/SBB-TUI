@@ -2,7 +2,7 @@
 
 ## 🏆 ROADMAP
 
-- [ ] Departure/Arrival boolean switch
+- [x] Departure/Arrival boolean switch
 - [ ] Transport type icons (.category/.transportations)
 - [ ] Vehicle model icons (.products)
 - [ ] Operator icons (?)A

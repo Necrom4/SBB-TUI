@@ -61,6 +61,7 @@ type model struct {
 	focusIndex    int
 	headerOrder   []focusable
 	inputs        []textinput.Model
+	isArrivalTime bool
 	connections   []models.Connection
 	loading       bool
 }
@@ -71,6 +72,7 @@ func InitialModel() model {
 			{KindInput, "from", 0},
 			{KindInput, "to", 1},
 			{KindButton, "swap", -1},
+			{KindButton, "isArrivalTime", -1},
 			{KindInput, "date", 2},
 			{KindInput, "time", 3},
 		},
@@ -130,10 +132,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			active := m.headerOrder[m.focusIndex]
 
 			if active.kind == KindButton {
-				if active.id == "swap" {
+				switch active.id {
+				case "swap":
 					v1 := m.inputs[0].Value()
 					m.inputs[0].SetValue(m.inputs[1].Value())
 					m.inputs[1].SetValue(v1)
+				case "isArrivalTime":
+					m.isArrivalTime = !m.isArrivalTime
 				}
 				return m, nil
 			}
@@ -202,6 +207,12 @@ func (m model) View() string {
 		switch item.id {
 		case "swap":
 			icon = ""
+		case "isArrivalTime":
+			if m.isArrivalTime {
+				icon = "󰗔"
+			} else {
+				icon = ""
+			}
 		}
 		return style.Render(icon)
 	}
@@ -256,6 +267,7 @@ func (m model) searchCmd() tea.Cmd {
 			m.inputs[1].Value(),
 			m.inputs[2].Value(),
 			m.inputs[3].Value(),
+			m.isArrivalTime,
 		)
 		if err != nil {
 			return nil
