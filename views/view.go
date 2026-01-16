@@ -15,12 +15,20 @@ import (
 )
 
 var (
-	sbbWhite    = lipgloss.Color("#F6F6F6")
-	sbbMidGray  = lipgloss.Color("#333333")
-	sbbDarkGray = lipgloss.Color("#212121")
-	sbbBlack    = lipgloss.Color("#141414")
-	sbbRed      = lipgloss.Color("#D82E20")
-	sbbBlue     = lipgloss.Color("#2E3279")
+	sbbWhite      = lipgloss.Color("#FFFFFF")
+	sbbMidWhite   = lipgloss.Color("#F6F6F6")
+	sbbDarkWhite  = lipgloss.Color("#DDDDDD")
+	sbbGray       = lipgloss.Color("#888888")
+	sbbMidGray    = lipgloss.Color("#484848")
+	sbbDarkGray   = lipgloss.Color("#333333")
+	sbbLightBlack = lipgloss.Color("#212121")
+	sbbBlack      = lipgloss.Color("#141414")
+	sbbRed        = lipgloss.Color("#D82E20")
+	sbbMidRed     = lipgloss.Color("#B52C24")
+	sbbDarkRed    = lipgloss.Color("#862010")
+	sbbLightBlue  = lipgloss.Color("#315086")
+	sbbBlue       = lipgloss.Color("#2E3279")
+	sbbGreen      = lipgloss.Color("#3A7446")
 
 	noStyle = lipgloss.NewStyle()
 
@@ -31,14 +39,8 @@ var (
 
 	blurredStyle = lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
-			BorderForeground(sbbDarkGray).
+			BorderForeground(sbbMidGray).
 			Padding(0, 1)
-
-	titleStyle = lipgloss.NewStyle().
-			MarginTop(1).
-			Bold(true).
-			Foreground(sbbWhite).
-			Background(sbbRed)
 )
 
 type DataMsg []models.Connection
@@ -232,7 +234,7 @@ func (m model) View() string {
 				noStyle.Bold(true).Render(dep),
 				lipgloss.NewStyle().Foreground(sbbRed).Render("→"),
 				noStyle.Bold(true).Render(arr),
-				lipgloss.NewStyle().Foreground(sbbMidGray).Render(dur),
+				lipgloss.NewStyle().Foreground(sbbLightBlue).Render(dur),
 				c.Transfers,
 			)
 		}
@@ -240,7 +242,10 @@ func (m model) View() string {
 
 	return lipgloss.JoinVertical(lipgloss.Left,
 		header,
-		focusedStyle.Width(m.width-2).Height(m.height-5).Render(results.String()),
+		lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(sbbDarkRed).
+			Padding(0, 1).Width(m.width-2).Height(m.height-5).Render(results.String()),
 	)
 }
 
