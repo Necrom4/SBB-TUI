@@ -14,15 +14,30 @@ import (
 )
 
 var (
-	sbbWhite     = lipgloss.NewStyle()
-	sbbDarkWhite = lipgloss.NewStyle().Foreground(lipgloss.Color("#F6F6F6"))
-	sbbMidGray   = lipgloss.NewStyle().Foreground(lipgloss.Color("#333333"))
-	sbbDarkGray  = lipgloss.NewStyle().Foreground(lipgloss.Color("#212121"))
-	sbbBlack     = lipgloss.NewStyle().Foreground(lipgloss.Color("#141414"))
-	sbbRed       = lipgloss.NewStyle().Foreground(lipgloss.Color("#D82E20"))
-	sbbBlue      = lipgloss.NewStyle().Foreground(lipgloss.Color("#2E3279"))
+	sbbWhite    = lipgloss.Color("#F6F6F6")
+	sbbMidGray  = lipgloss.Color("#333333")
+	sbbDarkGray = lipgloss.Color("#212121")
+	sbbBlack    = lipgloss.Color("#141414")
+	sbbRed      = lipgloss.Color("#D82E20")
+	sbbBlue     = lipgloss.Color("#2E3279")
 
-	sbbTitle = lipgloss.NewStyle().MarginTop(1).Bold(true).Foreground(lipgloss.Color("#F6F6F6")).Background(lipgloss.Color("#D82E20"))
+	noStyle = lipgloss.NewStyle()
+
+	focusedStyle = lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(sbbRed).
+			Padding(0, 1)
+
+	blurredStyle = lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(sbbDarkGray).
+			Padding(0, 1)
+
+	titleStyle = lipgloss.NewStyle().
+			MarginTop(1).
+			Bold(true).
+			Foreground(sbbWhite).
+			Background(sbbRed)
 )
 
 type DataMsg []models.Connection
@@ -31,49 +46,42 @@ type model struct {
 	width, height int
 	focusIndex    int
 	inputs        []textinput.Model
-	swapBtn       string
 	connections   []models.Connection
 	loading       bool
 }
 
 func InitialModel() model {
 	m := model{
-		inputs:  make([]textinput.Model, 2),
-		swapBtn: "<->",
+		inputs: make([]textinput.Model, 2),
 	}
 
-	var t textinput.Model
 	for i := range m.inputs {
-		t = textinput.New()
-		t.CharLimit = 36
-		t.Width = 64
+		t := textinput.New()
+		t.CharLimit = 32
 
-		switch i {
-		case 0:
+		if i == 0 {
 			t.Placeholder = "From"
 			t.Focus()
-			t.PromptStyle = sbbRed
-		case 1:
+			t.PromptStyle = lipgloss.NewStyle().Foreground(sbbRed)
+		} else {
 			t.Placeholder = "To"
 		}
-
 		m.inputs[i] = t
 	}
-
 	return m
 }
 
-func (m model) Init() tea.Cmd {
-	return textinput.Blink
-}
+func (m model) Init() tea.Cmd { return textinput.Blink }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+
 	case tea.WindowSizeMsg:
-		m.width = msg.Width
-		m.height = msg.Height
-		m.inputs[0].Width = (m.width / 2) - 6
-		m.inputs[1].Width = (m.width / 2) - 6
+		m.width, m.height = msg.Width, msg.Height
+		inputWidth := (m.width / 4) - 2
+		m.inputs[0].Width = inputWidth
+		m.inputs[1].Width = inputWidth
+
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "ctrl+c", "esc":
@@ -86,41 +94,37 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case "enter":
 			if m.focusIndex == 2 {
-				fromVal := m.inputs[0].Value()
-				toVal := m.inputs[1].Value()
-				m.inputs[0].SetValue(toVal)
-				m.inputs[1].SetValue(fromVal)
+				v1 := m.inputs[0].Value()
+				m.inputs[0].SetValue(m.inputs[1].Value())
+				m.inputs[1].SetValue(v1)
 				return m, nil
 			}
 			m.loading = true
 			return m, m.searchCmd()
 
 		case "tab", "shift+tab", "left", "right":
-			s := msg.String()
-
-			if s == "left" || s == "shift+tab" {
-				m.focusIndex--
-			} else {
-				m.focusIndex++
+			direction := 1
+			if msg.String() == "left" || msg.String() == "shift+tab" {
+				direction = -1
 			}
+			m.focusIndex += direction
 
-			if m.focusIndex >= len(m.inputs)+1 {
-				m.focusIndex--
+			if m.focusIndex > len(m.inputs) {
+				m.focusIndex = 0
 			} else if m.focusIndex < 0 {
-				m.focusIndex++
+				m.focusIndex = len(m.inputs)
 			}
 
-			cmds := make([]tea.Cmd, len(m.inputs))
-			for i := 0; i <= len(m.inputs)-1; i++ {
+			var cmds []tea.Cmd
+			for i := range m.inputs {
 				if i == m.focusIndex {
-					cmds[i] = m.inputs[i].Focus()
-					m.inputs[i].PromptStyle = sbbRed
-					continue
+					cmds = append(cmds, m.inputs[i].Focus())
+					m.inputs[i].PromptStyle = lipgloss.NewStyle().Foreground(sbbRed)
+				} else {
+					m.inputs[i].Blur()
+					m.inputs[i].PromptStyle = lipgloss.NewStyle()
 				}
-				m.inputs[i].Blur()
-				m.inputs[i].PromptStyle = sbbWhite
 			}
-
 			return m, tea.Batch(cmds...)
 		}
 
@@ -131,17 +135,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	cmd := m.updateInputs(msg)
-
 	return m, cmd
 }
 
 func (m *model) updateInputs(msg tea.Msg) tea.Cmd {
 	cmds := make([]tea.Cmd, len(m.inputs))
-
 	for i := range m.inputs {
 		m.inputs[i], cmds[i] = m.inputs[i].Update(msg)
 	}
-
 	return tea.Batch(cmds...)
 }
 
@@ -150,48 +151,28 @@ func (m model) View() string {
 		return "Initializing..."
 	}
 
-	headerHeight := 3
-	resultsHeight := m.height - headerHeight - 3 // Remaining space
-
-	columnWidth := m.width / 4
-
-	inputBoxStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(sbbMidGray.GetForeground()).
-		Width(columnWidth - 1).
-		Height(1)
-
-	swapBtnStyle := lipgloss.NewStyle().
-		Padding(0, 1).
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(sbbMidGray.GetForeground())
-
-	resultsStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(sbbRed.GetForeground()).
-		Width(m.width-2).
-		Height(resultsHeight).
-		Padding(0, 1)
-
-	fromStyle := inputBoxStyle
+	fromBox := blurredStyle
 	if m.focusIndex == 0 {
-		fromStyle = fromStyle.BorderForeground(sbbRed.GetForeground())
+		fromBox = fromBox.BorderForeground(sbbRed)
 	}
-	fromView := fromStyle.Render(m.inputs[0].View())
 
-	toStyle := inputBoxStyle
+	toBox := blurredStyle
 	if m.focusIndex == 1 {
-		toStyle = toStyle.BorderForeground(sbbRed.GetForeground())
+		toBox = toBox.BorderForeground(sbbRed)
 	}
-	toView := toStyle.Render(m.inputs[1].View())
 
+	btn := blurredStyle
 	if m.focusIndex == 2 {
-		swapBtnStyle = swapBtnStyle.BorderForeground(sbbRed.GetForeground())
+		btn = btn.BorderForeground(sbbRed)
 	}
-	swapBtnView := swapBtnStyle.Render("")
 
-	// ↮
-	header := lipgloss.JoinHorizontal(lipgloss.Top, fromView, toView, swapBtnView, " ", sbbTitle.Render(" SBB TIMETABLES <+> "))
+	header := lipgloss.JoinHorizontal(lipgloss.Top,
+		fromBox.Render(m.inputs[0].View()),
+		toBox.Render(m.inputs[1].View()),
+		btn.Render(""),
+		"   ",
+		titleStyle.Render(" SBB TIMETABLES "),
+	)
 
 	var results strings.Builder
 	if m.loading {
@@ -203,38 +184,35 @@ func (m model) View() string {
 			dep := c.FromData.Departure.Local().Format("15:04")
 			arr := c.ToData.Arrival.Local().Format("15:04")
 
-			durRaw := strings.Split(c.Duration, ":")
-			dur := durRaw[1] + " min"
-			if durRaw[0] != "00d00" {
-				dur = durRaw[0][3:] + "h " + durRaw[1] + "m"
+			// Duration cleanup
+			parts := strings.Split(c.Duration, ":") // e.g. 00d01:15:00
+			dur := parts[1] + " min"
+			if len(parts[0]) > 3 && parts[0][3:] != "00" {
+				dur = parts[0][3:] + "h " + parts[1] + "m"
 			}
 
 			fmt.Fprintf(&results, "\n %s  %s  %s  %s  (%v x)\n",
-				sbbWhite.Bold(true).Render(dep),
-				sbbRed.Render("→"),
-				sbbWhite.Bold(true).Render(arr),
-				sbbMidGray.Render(dur),
+				noStyle.Bold(true).Render(dep),
+				lipgloss.NewStyle().Foreground(sbbRed).Render("→"),
+				noStyle.Bold(true).Render(arr),
+				lipgloss.NewStyle().Foreground(sbbMidGray).Render(dur),
 				c.Transfers,
 			)
 		}
 	}
 
-	return lipgloss.JoinVertical(
-		lipgloss.Left,
+	return lipgloss.JoinVertical(lipgloss.Left,
 		header,
-		resultsStyle.Render(results.String()),
+		focusedStyle.Width(m.width-2).Height(m.height-5).Render(results.String()),
 	)
 }
 
 func (m model) searchCmd() tea.Cmd {
 	return func() tea.Msg {
-		from := m.inputs[0].Value()
-		to := m.inputs[1].Value()
-
-		results, err := api.FetchConnections(from, to)
+		res, err := api.FetchConnections(m.inputs[0].Value(), m.inputs[1].Value())
 		if err != nil {
 			return nil
 		}
-		return DataMsg(results)
+		return DataMsg(res)
 	}
 }
