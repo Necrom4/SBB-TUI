@@ -4,6 +4,7 @@ package views
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"sbb-tui/api"
 	"sbb-tui/models"
@@ -42,9 +43,21 @@ var (
 
 type DataMsg []models.Connection
 
+const (
+	KindInput int = iota
+	KindButton
+)
+
+type focusable struct {
+	kind  int
+	id    string
+	index int
+}
+
 type model struct {
 	width, height int
 	focusIndex    int
+	headerOrder   []focusable
 	inputs        []textinput.Model
 	connections   []models.Connection
 	loading       bool
@@ -52,19 +65,35 @@ type model struct {
 
 func InitialModel() model {
 	m := model{
-		inputs: make([]textinput.Model, 2),
+		headerOrder: []focusable{
+			{KindInput, "from", 0},
+			{KindInput, "to", 1},
+			{KindButton, "swap", -1},
+			{KindInput, "date", 2},
+			{KindInput, "time", 3},
+		},
+		inputs: make([]textinput.Model, 4),
 	}
+
+	now := time.Now()
 
 	for i := range m.inputs {
 		t := textinput.New()
 		t.CharLimit = 32
 
-		if i == 0 {
+		switch i {
+		case 0:
 			t.Placeholder = "From"
 			t.Focus()
 			t.PromptStyle = lipgloss.NewStyle().Foreground(sbbRed)
-		} else {
+		case 1:
 			t.Placeholder = "To"
+		case 2:
+			t.Placeholder = now.Format("2006-01-02")
+			t.Width = 12
+		case 3:
+			t.Placeholder = now.Format("15:04")
+			t.Width = 7
 		}
 		m.inputs[i] = t
 	}
@@ -93,36 +122,42 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case "enter":
-			if m.focusIndex == 2 {
-				v1 := m.inputs[0].Value()
-				m.inputs[0].SetValue(m.inputs[1].Value())
-				m.inputs[1].SetValue(v1)
+			active := m.headerOrder[m.focusIndex]
+
+			if active.kind == KindButton {
+				if active.id == "swap" {
+					v1 := m.inputs[0].Value()
+					m.inputs[0].SetValue(m.inputs[1].Value())
+					m.inputs[1].SetValue(v1)
+				}
 				return m, nil
 			}
+
 			m.loading = true
 			return m, m.searchCmd()
 
 		case "tab", "shift+tab", "left", "right":
-			direction := 1
 			if msg.String() == "left" || msg.String() == "shift+tab" {
-				direction = -1
+				m.focusIndex--
+			} else {
+				m.focusIndex++
 			}
-			m.focusIndex += direction
 
-			if m.focusIndex > len(m.inputs) {
+			if m.focusIndex >= len(m.headerOrder) {
 				m.focusIndex = 0
-			} else if m.focusIndex < 0 {
-				m.focusIndex = len(m.inputs)
+			}
+			if m.focusIndex < 0 {
+				m.focusIndex = len(m.headerOrder) - 1
 			}
 
 			var cmds []tea.Cmd
-			for i := range m.inputs {
-				if i == m.focusIndex {
-					cmds = append(cmds, m.inputs[i].Focus())
-					m.inputs[i].PromptStyle = lipgloss.NewStyle().Foreground(sbbRed)
-				} else {
-					m.inputs[i].Blur()
-					m.inputs[i].PromptStyle = lipgloss.NewStyle()
+			for _, item := range m.headerOrder {
+				if item.kind == KindInput {
+					if item.index == m.headerOrder[m.focusIndex].index {
+						cmds = append(cmds, m.inputs[item.index].Focus())
+					} else {
+						m.inputs[item.index].Blur()
+					}
 				}
 			}
 			return m, tea.Batch(cmds...)
@@ -147,32 +182,31 @@ func (m *model) updateInputs(msg tea.Msg) tea.Cmd {
 }
 
 func (m model) View() string {
-	if m.width == 0 {
-		return "Initializing..."
+	headerItem := func(idx int) string {
+		item := m.headerOrder[idx]
+		style := blurredStyle
+		if m.focusIndex == idx {
+			style = focusedStyle
+		}
+
+		if item.kind == KindInput {
+			return style.Render(m.inputs[item.index].View())
+		}
+
+		icon := " "
+		switch item.id {
+		case "swap":
+			icon = ""
+		}
+		return style.Render(icon)
 	}
 
-	fromBox := blurredStyle
-	if m.focusIndex == 0 {
-		fromBox = fromBox.BorderForeground(sbbRed)
+	var headerItems []string
+	for i := range m.headerOrder {
+		headerItems = append(headerItems, headerItem(i))
 	}
 
-	toBox := blurredStyle
-	if m.focusIndex == 1 {
-		toBox = toBox.BorderForeground(sbbRed)
-	}
-
-	btn := blurredStyle
-	if m.focusIndex == 2 {
-		btn = btn.BorderForeground(sbbRed)
-	}
-
-	header := lipgloss.JoinHorizontal(lipgloss.Top,
-		fromBox.Render(m.inputs[0].View()),
-		toBox.Render(m.inputs[1].View()),
-		btn.Render(""),
-		"   ",
-		titleStyle.Render(" SBB TIMETABLES "),
-	)
+	header := lipgloss.JoinHorizontal(lipgloss.Top, headerItems...)
 
 	var results strings.Builder
 	if m.loading {
@@ -209,7 +243,12 @@ func (m model) View() string {
 
 func (m model) searchCmd() tea.Cmd {
 	return func() tea.Msg {
-		res, err := api.FetchConnections(m.inputs[0].Value(), m.inputs[1].Value())
+		res, err := api.FetchConnections(
+			m.inputs[0].Value(),
+			m.inputs[1].Value(),
+			m.inputs[2].Value(),
+			m.inputs[3].Value(),
+		)
 		if err != nil {
 			return nil
 		}
