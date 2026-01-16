@@ -38,6 +38,12 @@ type Section struct {
 		Operator string `json:"operator"`
 		To       string `json:"to"`
 	} `json:"journey"`
+	Departure struct {
+		Delay int `json:"delay"`
+	} `json:"departure"`
+	Arrival struct {
+		Delay int `json:"delay"`
+	} `json:"arrival"`
 }
 
 type Connection struct {

@@ -7,7 +7,7 @@
 - [ ] Capacity icons (doesn't seem to be available) 󰀎
 - [x] Vehicle model icons
 - [x] Operator icons
-- [ ] Platforms
+- [x] Platforms
 - [x] Visual representation of stops
   - [ ] Length represents time
 - [x] Richtung

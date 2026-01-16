@@ -240,32 +240,54 @@ func (m model) View() string {
 		results.WriteString("\n  Enter stations above to see timetables")
 	} else {
 		for _, c := range m.connections {
+			vehicleIcon := noStyle.Background(sbbBlue).Foreground(sbbWhite).Render("  ")
+			vehicleCategory := noStyle.Background(sbbRed).Foreground(sbbWhite).Bold(true).Render(c.Sections[0].Journey.Category + c.Sections[0].Journey.Number)
+			company := noStyle.Background(sbbWhite).Foreground(sbbBlack).Render(c.Sections[0].Journey.Operator)
+			endStop := noStyle.Render(c.Sections[0].Journey.To)
 			dep := c.FromData.Departure.Local().Format("15:04")
 			arr := c.ToData.Arrival.Local().Format("15:04")
-
+			departure := noStyle.Bold(true).Render(dep)
+			arrival := noStyle.Bold(true).Render(arr)
+			departureDelay := ""
+			if d := c.Sections[0].Departure.Delay; d > 0 {
+				departureDelay = noStyle.Foreground(sbbRed).Bold(true).Render(fmt.Sprintf(" +%d", d))
+			}
+			arrivalDelay := ""
+			if d := c.Sections[0].Arrival.Delay; d > 0 {
+				arrivalDelay = noStyle.Foreground(sbbRed).Bold(true).Render(fmt.Sprintf(" +%d", d))
+			}
+			stopsLine := noStyle.Bold(true).Render("●" + strings.Repeat("──○", c.Transfers) + "──●")
+			platform := noStyle.Render(c.FromData.Platform)
+			if len(platform) > 0 {
+				platform = "󱀓 " + platform + "      "
+			}
 			// Duration cleanup
 			parts := strings.Split(c.Duration, ":") // e.g. 00d01:15:00
 			dur := parts[1] + " min"
 			if len(parts[0]) > 3 && parts[0][3:] != "00" {
 				dur = parts[0][3:] + "h " + parts[1] + "m"
 			}
+			duration := noStyle.Render(dur)
 
-			fmt.Fprintf(&results, "\n\n  %s %s %s  %s\n\n  %s  %s  %s\n\n  %v\n\n",
-				lipgloss.NewStyle().Background(sbbBlue).Foreground(sbbWhite).Render("  "),
-				lipgloss.NewStyle().Background(sbbRed).Foreground(sbbWhite).Bold(true).Render(c.Sections[0].Journey.Category+c.Sections[0].Journey.Number),
-				lipgloss.NewStyle().Background(sbbWhite).Foreground(sbbBlack).Render(c.Sections[0].Journey.Operator),
-				noStyle.Render(c.Sections[0].Journey.To),
-				noStyle.Bold(true).Render(dep),
-				noStyle.Bold(true).Render("●"+strings.Repeat("──○", c.Transfers)),
-				noStyle.Bold(true).Render(arr),
-				noStyle.Render(dur),
+			fmt.Fprintf(&results, "\n\n  %s %s %s  %s\n\n  %s%s  %s  %s%s\n\n  %s%v\n\n",
+				vehicleIcon,
+				vehicleCategory,
+				company,
+				endStop,
+				departure,
+				departureDelay,
+				stopsLine,
+				arrival,
+				arrivalDelay,
+				platform,
+				duration,
 			)
 		}
 	}
 
 	return lipgloss.JoinVertical(lipgloss.Left,
 		header,
-		lipgloss.NewStyle().
+		noStyle.
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(sbbDarkRed).
 			Width(m.width-2).Height(m.height-5).Render(results.String()),
