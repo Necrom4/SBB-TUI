@@ -22,7 +22,7 @@ var (
 	sbbRed       = lipgloss.NewStyle().Foreground(lipgloss.Color("#D82E20"))
 	sbbBlue      = lipgloss.NewStyle().Foreground(lipgloss.Color("#2E3279"))
 
-	sbbTitle = lipgloss.NewStyle().Padding(1).MarginBottom(1).Bold(true).Foreground(lipgloss.Color("#F6F6F6")).Background(lipgloss.Color("#D82E20"))
+	sbbTitle = lipgloss.NewStyle().MarginTop(1).Bold(true).Foreground(lipgloss.Color("#F6F6F6")).Background(lipgloss.Color("#D82E20"))
 )
 
 type DataMsg []models.Connection
@@ -31,13 +31,15 @@ type model struct {
 	width, height int
 	focusIndex    int
 	inputs        []textinput.Model
+	swapBtn       string
 	connections   []models.Connection
 	loading       bool
 }
 
 func InitialModel() model {
 	m := model{
-		inputs: make([]textinput.Model, 2),
+		inputs:  make([]textinput.Model, 2),
+		swapBtn: "<->",
 	}
 
 	var t textinput.Model
@@ -70,7 +72,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		// Update input widths to fill half the screen each
 		m.inputs[0].Width = (m.width / 2) - 6
 		m.inputs[1].Width = (m.width / 2) - 6
 	case tea.KeyMsg:
@@ -78,7 +79,19 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "ctrl+c", "esc":
 			return m, tea.Quit
 
+		case "q":
+			if m.focusIndex > 1 {
+				return m, tea.Quit
+			}
+
 		case "enter":
+			if m.focusIndex == 2 {
+				fromVal := m.inputs[0].Value()
+				toVal := m.inputs[1].Value()
+				m.inputs[0].SetValue(toVal)
+				m.inputs[1].SetValue(fromVal)
+				return m, nil
+			}
 			m.loading = true
 			return m, m.searchCmd()
 
@@ -91,10 +104,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.focusIndex++
 			}
 
-			if m.focusIndex >= len(m.inputs) {
-				m.focusIndex = 0
+			if m.focusIndex >= len(m.inputs)+1 {
+				m.focusIndex--
 			} else if m.focusIndex < 0 {
-				m.focusIndex = len(m.inputs) - 1
+				m.focusIndex++
 			}
 
 			cmds := make([]tea.Cmd, len(m.inputs))
@@ -137,24 +150,22 @@ func (m model) View() string {
 		return "Initializing..."
 	}
 
-	// 1. Define Styles
 	headerHeight := 3
 	resultsHeight := m.height - headerHeight - 3 // Remaining space
 
 	columnWidth := m.width / 4
 
-	// Style for the input boxes
 	inputBoxStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(sbbMidGray.GetForeground()).
 		Width(columnWidth - 1).
 		Height(1)
 
-	if m.focusIndex < 2 { // If an input is focused, color its border red
-		// We'll apply this logic dynamically below
-	}
+	swapBtnStyle := lipgloss.NewStyle().
+		Padding(0, 1).
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(sbbMidGray.GetForeground())
 
-	// Style for the results area
 	resultsStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(sbbRed.GetForeground()).
@@ -162,7 +173,6 @@ func (m model) View() string {
 		Height(resultsHeight).
 		Padding(0, 1)
 
-	// 2. Prepare the Input Boxes
 	fromStyle := inputBoxStyle
 	if m.focusIndex == 0 {
 		fromStyle = fromStyle.BorderForeground(sbbRed.GetForeground())
@@ -175,10 +185,14 @@ func (m model) View() string {
 	}
 	toView := toStyle.Render(m.inputs[1].View())
 
-	// Join them horizontally
-	header := lipgloss.JoinHorizontal(lipgloss.Top, fromView, toView)
+	if m.focusIndex == 2 {
+		swapBtnStyle = swapBtnStyle.BorderForeground(sbbRed.GetForeground())
+	}
+	swapBtnView := swapBtnStyle.Render("")
 
-	// 3. Prepare the Results
+	// ↮
+	header := lipgloss.JoinHorizontal(lipgloss.Top, fromView, toView, swapBtnView, " ", sbbTitle.Render(" SBB TIMETABLES <+> "))
+
 	var results strings.Builder
 	if m.loading {
 		results.WriteString("\n  Searching connections...")
@@ -189,7 +203,6 @@ func (m model) View() string {
 			dep := c.FromData.Departure.Local().Format("15:04")
 			arr := c.ToData.Arrival.Local().Format("15:04")
 
-			// Simple slice to clean duration 00d00:19:00 -> 19 min
 			durRaw := strings.Split(c.Duration, ":")
 			dur := durRaw[1] + " min"
 			if durRaw[0] != "00d00" {
@@ -206,10 +219,8 @@ func (m model) View() string {
 		}
 	}
 
-	// 4. Final Assembly
 	return lipgloss.JoinVertical(
 		lipgloss.Left,
-		sbbTitle.Render(" SBB RAILWAYS "),
 		header,
 		resultsStyle.Render(results.String()),
 	)
