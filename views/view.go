@@ -82,6 +82,7 @@ func InitialModel() model {
 			{KindButton, "isArrivalTime", -1},
 			{KindInput, "date", 2},
 			{KindInput, "time", 3},
+			{KindButton, "search", -1},
 		},
 		inputs: make([]textinput.Model, 4),
 	}
@@ -121,7 +122,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
-		inputWidth := ((m.width - 2 - 77) / 2)
+		inputWidth := ((m.width - 2 - 82) / 2)
 		m.inputs[0].Width = inputWidth
 		m.inputs[1].Width = inputWidth
 
@@ -146,6 +147,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.inputs[1].SetValue(v1)
 				case "isArrivalTime":
 					m.isArrivalTime = !m.isArrivalTime
+				case "search":
+					return m, m.searchCmd()
 				}
 				return m, nil
 			}
@@ -220,6 +223,8 @@ func (m model) View() string {
 			} else {
 				icon = ""
 			}
+		case "search":
+			icon = ""
 		}
 		return style.Render(icon)
 	}
