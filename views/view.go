@@ -14,6 +14,16 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+const (
+	// Layout constants
+	KindInput int = iota
+	KindButton
+	// Focusable item kinds
+	headerHeight    = 3
+	resultBoxHeight = 9
+	layoutPadding   = 2
+)
+
 var (
 	sbbWhite      = lipgloss.Color("#FFFFFF")
 	sbbMidWhite   = lipgloss.Color("#F6F6F6")
@@ -29,7 +39,9 @@ var (
 	sbbLightBlue  = lipgloss.Color("#315086")
 	sbbBlue       = lipgloss.Color("#2E3279")
 	sbbGreen      = lipgloss.Color("#3A7446")
+)
 
+var (
 	noStyle = lipgloss.NewStyle()
 
 	focusedStyle = lipgloss.NewStyle().
@@ -50,18 +62,13 @@ var (
 			Background(sbbRed)
 )
 
-type DataMsg []models.Connection
-
-const (
-	KindInput int = iota
-	KindButton
-)
-
 type focusable struct {
 	kind  int
 	id    string
 	index int
 }
+
+type DataMsg []models.Connection
 
 type model struct {
 	width, height int
@@ -123,7 +130,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
-		inputWidth := ((m.width - 2 - 82) / 2)
+		inputWidth := ((m.width - layoutPadding - 82) / 2)
 		m.inputs[0].Width = inputWidth
 		m.inputs[1].Width = inputWidth
 
@@ -133,30 +140,28 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 
 		case "q":
-			if m.tabIndex > 1 {
+			active := m.headerOrder[m.tabIndex]
+			if active.kind == KindButton {
 				return m, tea.Quit
 			}
 
 		case "enter":
-			active := m.headerOrder[m.tabIndex]
-
-			if active.kind == KindButton {
-				switch active.id {
-				case "swap":
-					v1 := m.inputs[0].Value()
-					m.inputs[0].SetValue(m.inputs[1].Value())
-					m.inputs[1].SetValue(v1)
-				case "isArrivalTime":
-					m.isArrivalTime = !m.isArrivalTime
-				case "search":
-					m.loading = true
-					return m, m.searchCmd()
-				}
-				return m, nil
-			}
-
 			m.loading = true
 			return m, m.searchCmd()
+
+		case " ":
+			active := m.headerOrder[m.tabIndex]
+			switch active.id {
+			case "swap":
+				tmp := m.inputs[0].Value()
+				m.inputs[0].SetValue(m.inputs[1].Value())
+				m.inputs[1].SetValue(tmp)
+			case "isArrivalTime":
+				m.isArrivalTime = !m.isArrivalTime
+			case "search":
+				m.loading = true
+				return m, m.searchCmd()
+			}
 
 		case "tab", "shift+tab", "left", "right":
 			if msg.String() == "left" || msg.String() == "shift+tab" {
@@ -205,6 +210,19 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
+func (m model) View() string {
+	header := m.renderHeader()
+	results := m.renderResults()
+
+	return lipgloss.JoinVertical(lipgloss.Left,
+		header,
+		noStyle.
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(sbbDarkRed).
+			Width(m.width-layoutPadding).Height(m.height-headerHeight-layoutPadding).Render(results),
+	)
+}
+
 func (m *model) updateInputs(msg tea.Msg) tea.Cmd {
 	cmds := make([]tea.Cmd, len(m.inputs))
 	for i := range m.inputs {
@@ -213,133 +231,9 @@ func (m *model) updateInputs(msg tea.Msg) tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
-func (m model) View() string {
-	headerItem := func(idx int) string {
-		item := m.headerOrder[idx]
-		style := blurredStyle
-		if m.tabIndex == idx {
-			style = focusedStyle
-		}
-
-		if item.kind == KindInput {
-			return style.Render(m.inputs[item.index].View())
-		}
-
-		icon := " "
-		switch item.id {
-		case "swap":
-			icon = ""
-		case "isArrivalTime":
-			if m.isArrivalTime {
-				icon = "󰗔"
-			} else {
-				icon = ""
-			}
-		case "search":
-			icon = ""
-		}
-		return style.Render(icon)
-	}
-
-	var headerItems []string
-	for i := range m.headerOrder {
-		headerItems = append(headerItems, headerItem(i))
-	}
-
-	headerItems = append(headerItems, titleStyle.Render(" SBB TIMETABLES <+> "))
-
-	header := lipgloss.JoinHorizontal(lipgloss.Top, headerItems...)
-
-	var resultsContent string
-	if m.loading {
-		resultsContent = "\n  Searching connections..."
-	} else if len(m.connections) == 0 {
-		resultsContent = "\n  Enter stations above to see timetables"
-	} else {
-		var boxes []string
-		boxWidth := (m.width - 4) / 2
-
-		for i, c := range m.connections {
-			firstVehicle := 0
-			for x := range c.Sections {
-				if c.Sections[x].Journey != nil {
-					firstVehicle = x
-				}
-			}
-			vehicleIcon := noStyle.Background(sbbBlue).Foreground(sbbWhite).Render("  ")
-			vehicleCategory := noStyle.Background(sbbRed).Foreground(sbbWhite).Bold(true).Render(c.Sections[firstVehicle].Journey.Category + c.Sections[firstVehicle].Journey.Number)
-			company := noStyle.Background(sbbWhite).Foreground(sbbBlack).Render(c.Sections[firstVehicle].Journey.Operator)
-			endStop := noStyle.Render(c.Sections[firstVehicle].Journey.To)
-			dep := c.FromData.Departure.Local().Format("15:04")
-			arr := c.ToData.Arrival.Local().Format("15:04")
-			departure := noStyle.Bold(true).Render(dep)
-			arrival := noStyle.Bold(true).Render(arr)
-			departureDelay := ""
-			if d := c.Sections[firstVehicle].Departure.Delay; d > 0 {
-				departureDelay = noStyle.Foreground(sbbRed).Bold(true).Render(fmt.Sprintf(" +%d", d))
-			}
-			arrivalDelay := ""
-			if d := c.Sections[firstVehicle].Arrival.Delay; d > 0 {
-				arrivalDelay = noStyle.Foreground(sbbRed).Bold(true).Render(fmt.Sprintf(" +%d", d))
-			}
-			stopsLine := noStyle.Bold(true).Render("●" + strings.Repeat("──○", c.Transfers) + "──●")
-			platform := ""
-			if len(c.FromData.Platform) > 0 {
-				platform = "󱀓 " + noStyle.Render(c.FromData.Platform) + "      "
-			}
-			walk := ""
-			if c.Sections[0].Walk != nil {
-				walk = "       "
-			}
-			platformOrWalk := ""
-			if platform != "" {
-				platformOrWalk = platform
-			} else if walk != "" {
-				platformOrWalk = walk
-			}
-			// Duration cleanup
-			parts := strings.Split(c.Duration, ":") // e.g. 00d01:15:00
-			dur := parts[1] + " min"
-			if len(parts[0]) > 3 && parts[0][3:] != "00" {
-				dur = parts[0][3:] + "h " + parts[1] + "m"
-			}
-			duration := noStyle.Render(dur)
-
-			content := fmt.Sprintf("\n  %s %s %s  %s\n\n  %s%s  %s  %s%s\n\n  %s%v\n",
-				vehicleIcon,
-				vehicleCategory,
-				company,
-				endStop,
-				departure,
-				departureDelay,
-				stopsLine,
-				arrival,
-				arrivalDelay,
-				platformOrWalk,
-				duration,
-			)
-
-			style := blurredStyle.Width(boxWidth)
-			if i == m.resultIndex {
-				style = focusedStyle.Width(boxWidth)
-			}
-			boxes = append(boxes, style.Render(content))
-		}
-		resultsContent = lipgloss.JoinVertical(lipgloss.Left, boxes...)
-	}
-
-	return lipgloss.JoinVertical(lipgloss.Left,
-		header,
-		noStyle.
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(sbbDarkRed).
-			Width(m.width-2).Height(m.height-5).Render(resultsContent),
-	)
-}
-
 func (m model) searchCmd() tea.Cmd {
 	return func() tea.Msg {
-		nbBoxes := (m.height - 5) / 9
+		nbBoxes := (m.height - headerHeight - layoutPadding) / resultBoxHeight
 		res, err := api.FetchConnections(
 			m.inputs[0].Value(),
 			m.inputs[1].Value(),
@@ -353,4 +247,140 @@ func (m model) searchCmd() tea.Cmd {
 		}
 		return DataMsg(res)
 	}
+}
+
+func (m model) renderHeader() string {
+	var headerItems []string
+	for i := range m.headerOrder {
+		headerItems = append(headerItems, m.renderHeaderItem(i))
+	}
+
+	headerItems = append(headerItems, titleStyle.Render(" SBB TIMETABLES <+> "))
+
+	return lipgloss.JoinHorizontal(lipgloss.Top, headerItems...)
+}
+
+func (m model) renderHeaderItem(idx int) string {
+	item := m.headerOrder[idx]
+	style := blurredStyle
+	if m.tabIndex == idx {
+		style = focusedStyle
+	}
+
+	if item.kind == KindInput {
+		return style.Render(m.inputs[item.index].View())
+	}
+
+	icon := " "
+	switch item.id {
+	case "swap":
+		icon = ""
+	case "isArrivalTime":
+		if m.isArrivalTime {
+			icon = "󰗔"
+		} else {
+			icon = ""
+		}
+	case "search":
+		icon = ""
+	}
+	return style.Render(icon)
+}
+
+func (m model) renderResults() string {
+	if m.loading {
+		return "\n  Searching connections..."
+	}
+
+	if len(m.connections) == 0 {
+		return "\n  Enter stations above to see timetables"
+	}
+
+	var boxes []string
+	boxWidth := (m.width - 4) / 2
+
+	for i, c := range m.connections {
+		boxes = append(boxes, m.renderSimpleConnection(c, i, boxWidth))
+	}
+
+	return lipgloss.JoinVertical(lipgloss.Left, boxes...)
+}
+
+func (m model) renderSimpleConnection(c models.Connection, index int, width int) string {
+	firstVehicle := 0
+	for x := range c.Sections {
+		if c.Sections[x].Journey != nil {
+			firstVehicle = x
+			break
+		}
+	}
+
+	vehicleIcon := noStyle.Background(sbbBlue).Foreground(sbbWhite).Render("  ")
+	vehicleCategory := noStyle.Background(sbbRed).Foreground(sbbWhite).Bold(true).
+		Render(c.Sections[firstVehicle].Journey.Category + c.Sections[firstVehicle].Journey.Number)
+	company := noStyle.Background(sbbWhite).Foreground(sbbBlack).
+		Render(c.Sections[firstVehicle].Journey.Operator)
+	endStop := noStyle.Render(c.Sections[firstVehicle].Journey.To)
+
+	dep := c.FromData.Departure.Local().Format("15:04")
+	arr := c.ToData.Arrival.Local().Format("15:04")
+	departure := noStyle.Bold(true).Render(dep)
+	arrival := noStyle.Bold(true).Render(arr)
+
+	departureDelay := formatDelay(c.Sections[firstVehicle].Departure.Delay)
+	arrivalDelay := formatDelay(c.Sections[firstVehicle].Arrival.Delay)
+
+	stopsLine := noStyle.Bold(true).Render("●" + strings.Repeat("──○", c.Transfers) + "──●")
+
+	platformOrWalk := ""
+	if len(c.FromData.Platform) > 0 {
+		platformOrWalk = "󱀓 " + noStyle.Render(c.FromData.Platform) + "      "
+	} else if c.Sections[0].Walk != nil {
+		platformOrWalk = "      "
+	}
+
+	duration := noStyle.Render(formatDuration(c.Duration))
+
+	content := fmt.Sprintf("\n  %s %s %s  %s\n\n  %s%s  %s  %s%s\n\n  %s%v\n",
+		vehicleIcon,
+		vehicleCategory,
+		company,
+		endStop,
+		departure,
+		departureDelay,
+		stopsLine,
+		arrival,
+		arrivalDelay,
+		platformOrWalk,
+		duration,
+	)
+
+	style := blurredStyle.Width(width)
+	if index == m.resultIndex {
+		style = focusedStyle.Width(width)
+	}
+
+	return style.Render(content)
+}
+
+// 00d01:15:00" -> "1h 15m" or "15 min".
+func formatDuration(duration string) string {
+	parts := strings.Split(duration, ":")
+	if len(parts) < 2 {
+		return duration
+	}
+
+	minutes := parts[1]
+	if len(parts[0]) > 3 && parts[0][3:] != "00" {
+		hours := parts[0][3:]
+		return hours + "h " + minutes + "m"
+	}
+	return minutes + "min"
+}
+
+func formatDelay(delay int) string {
+	if delay > 0 {
+		return noStyle.Foreground(sbbRed).Bold(true).Render(fmt.Sprintf(" +%d", delay))
+	}
+	return ""
 }
