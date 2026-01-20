@@ -65,7 +65,8 @@ type focusable struct {
 
 type model struct {
 	width, height int
-	focusIndex    int
+	tabIndex      int
+	resultIndex   int
 	headerOrder   []focusable
 	inputs        []textinput.Model
 	isArrivalTime bool
@@ -132,12 +133,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 
 		case "q":
-			if m.focusIndex > 1 {
+			if m.tabIndex > 1 {
 				return m, tea.Quit
 			}
 
 		case "enter":
-			active := m.headerOrder[m.focusIndex]
+			active := m.headerOrder[m.tabIndex]
 
 			if active.kind == KindButton {
 				switch active.id {
@@ -148,6 +149,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				case "isArrivalTime":
 					m.isArrivalTime = !m.isArrivalTime
 				case "search":
+					m.loading = true
 					return m, m.searchCmd()
 				}
 				return m, nil
@@ -158,22 +160,22 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case "tab", "shift+tab", "left", "right":
 			if msg.String() == "left" || msg.String() == "shift+tab" {
-				m.focusIndex--
+				m.tabIndex--
 			} else {
-				m.focusIndex++
+				m.tabIndex++
 			}
 
-			if m.focusIndex >= len(m.headerOrder) {
-				m.focusIndex = 0
+			if m.tabIndex >= len(m.headerOrder) {
+				m.tabIndex = 0
 			}
-			if m.focusIndex < 0 {
-				m.focusIndex = len(m.headerOrder) - 1
+			if m.tabIndex < 0 {
+				m.tabIndex = len(m.headerOrder) - 1
 			}
 
 			var cmds []tea.Cmd
 			for _, item := range m.headerOrder {
 				if item.kind == KindInput {
-					if item.index == m.headerOrder[m.focusIndex].index {
+					if item.index == m.headerOrder[m.tabIndex].index {
 						cmds = append(cmds, m.inputs[item.index].Focus())
 					} else {
 						m.inputs[item.index].Blur()
@@ -181,11 +183,21 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 			return m, tea.Batch(cmds...)
+
+		case "up":
+			if len(m.connections) > 0 && m.resultIndex > 0 {
+				m.resultIndex--
+			}
+		case "down":
+			if len(m.connections) > 0 && m.resultIndex < len(m.connections)-1 {
+				m.resultIndex++
+			}
 		}
 
 	case DataMsg:
 		m.loading = false
 		m.connections = msg
+		m.resultIndex = 0
 		return m, nil
 	}
 
@@ -205,7 +217,7 @@ func (m model) View() string {
 	headerItem := func(idx int) string {
 		item := m.headerOrder[idx]
 		style := blurredStyle
-		if m.focusIndex == idx {
+		if m.tabIndex == idx {
 			style = focusedStyle
 		}
 
@@ -238,20 +250,22 @@ func (m model) View() string {
 
 	header := lipgloss.JoinHorizontal(lipgloss.Top, headerItems...)
 
-	var results strings.Builder
+	var resultsContent string
 	if m.loading {
-		results.WriteString("\n  Searching connections...")
+		resultsContent = "\n  Searching connections..."
 	} else if len(m.connections) == 0 {
-		results.WriteString("\n  Enter stations above to see timetables")
+		resultsContent = "\n  Enter stations above to see timetables"
 	} else {
-		for _, c := range m.connections {
+		var boxes []string
+		boxWidth := (m.width - 4) / 2
+
+		for i, c := range m.connections {
 			firstVehicle := 0
-			for i := range c.Sections {
-				if c.Sections[i].Journey != nil {
-					firstVehicle = i
+			for x := range c.Sections {
+				if c.Sections[x].Journey != nil {
+					firstVehicle = x
 				}
 			}
-
 			vehicleIcon := noStyle.Background(sbbBlue).Foreground(sbbWhite).Render("  ")
 			vehicleCategory := noStyle.Background(sbbRed).Foreground(sbbWhite).Bold(true).Render(c.Sections[firstVehicle].Journey.Category + c.Sections[firstVehicle].Journey.Number)
 			company := noStyle.Background(sbbWhite).Foreground(sbbBlack).Render(c.Sections[firstVehicle].Journey.Operator)
@@ -291,7 +305,7 @@ func (m model) View() string {
 			}
 			duration := noStyle.Render(dur)
 
-			fmt.Fprintf(&results, "\n\n  %s %s %s  %s\n\n  %s%s  %s  %s%s\n\n  %s%v\n\n",
+			content := fmt.Sprintf("\n  %s %s %s  %s\n\n  %s%s  %s  %s%s\n\n  %s%v\n",
 				vehicleIcon,
 				vehicleCategory,
 				company,
@@ -304,7 +318,14 @@ func (m model) View() string {
 				platformOrWalk,
 				duration,
 			)
+
+			style := blurredStyle.Width(boxWidth)
+			if i == m.resultIndex {
+				style = focusedStyle.Width(boxWidth)
+			}
+			boxes = append(boxes, style.Render(content))
 		}
+		resultsContent = lipgloss.JoinVertical(lipgloss.Left, boxes...)
 	}
 
 	return lipgloss.JoinVertical(lipgloss.Left,
@@ -312,7 +333,7 @@ func (m model) View() string {
 		noStyle.
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(sbbDarkRed).
-			Width(m.width-2).Height(m.height-5).Render(results.String()),
+			Width(m.width-2).Height(m.height-5).Render(resultsContent),
 	)
 }
 
