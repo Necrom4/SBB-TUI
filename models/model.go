@@ -32,12 +32,15 @@ type Station struct {
 }
 
 type Section struct {
-	Journey struct {
+	Journey *struct {
 		Category string `json:"category"`
 		Number   string `json:"number"`
 		Operator string `json:"operator"`
 		To       string `json:"to"`
 	} `json:"journey"`
+	Walk *struct {
+		Duration int `json:"duration"`
+	} `json:"walk"`
 	Departure struct {
 		Delay int `json:"delay"`
 	} `json:"departure"`
