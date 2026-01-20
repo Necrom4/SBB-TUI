@@ -13,7 +13,7 @@ import (
 	"sbb-tui/utils"
 )
 
-func FetchConnections(from, to, date, timeStr string, isArrivalTime bool) ([]models.Connection, error) {
+func FetchConnections(from, to, date, timeStr string, isArrivalTime bool, limit int) ([]models.Connection, error) {
 	now := time.Now()
 
 	if date == "" {
@@ -25,12 +25,13 @@ func FetchConnections(from, to, date, timeStr string, isArrivalTime bool) ([]mod
 	}
 
 	apiURL := fmt.Sprintf(
-		"https://transport.opendata.ch/v1/connections?from=%s&to=%s&date=%s&time=%s&isArrivalTime=%s&limit=6",
+		"https://transport.opendata.ch/v1/connections?from=%s&to=%s&date=%s&time=%s&isArrivalTime=%s&limit=%v",
 		url.QueryEscape(from),
 		url.QueryEscape(to),
 		url.QueryEscape(date),
 		url.QueryEscape(timeStr),
 		strconv.Itoa(utils.Btoi(isArrivalTime)),
+		limit,
 	)
 
 	resp, err := http.Get(apiURL)

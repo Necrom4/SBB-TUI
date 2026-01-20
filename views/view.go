@@ -339,12 +339,14 @@ func (m model) View() string {
 
 func (m model) searchCmd() tea.Cmd {
 	return func() tea.Msg {
+		nbBoxes := (m.height - 5) / 9
 		res, err := api.FetchConnections(
 			m.inputs[0].Value(),
 			m.inputs[1].Value(),
 			m.inputs[2].Value(),
 			m.inputs[3].Value(),
 			m.isArrivalTime,
+			nbBoxes,
 		)
 		if err != nil {
 			return nil
