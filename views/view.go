@@ -125,6 +125,7 @@ func InitialModel() model {
 			t.Placeholder = now.Format("15:04")
 			t.Prompt = " "
 			t.Width = 7
+			t.CharLimit = 5
 		}
 		m.inputs[i] = t
 	}
@@ -247,6 +248,54 @@ func (m model) maxVisibleConnections() int {
 
 func (m *model) updateInputs(msg tea.Msg) tea.Cmd {
 	cmds := make([]tea.Cmd, len(m.inputs))
+
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		// Check key input in input fields
+		switch m.headerOrder[m.tabIndex].id {
+		case "time":
+			t := &m.inputs[3]
+			s := msg.String()
+			val := t.Value()
+
+			if msg.Type == tea.KeyBackspace && len(val) == 3 {
+				t.SetValue(val[:1]) // Delete the colon AND the digit before it
+				return nil
+			}
+
+			// Only process numeric runes for the following logic
+			if len(s) == 1 && s >= "0" && s <= "9" {
+				switch len(val) {
+				// Logic for each digit
+				case 0:
+					if s > "2" {
+						return nil
+					}
+				case 1:
+					if val == "2" && s > "3" {
+						return nil
+					}
+				// Add `:` when typing third digit
+				case 2:
+					if s >= "0" && s <= "9" {
+						t.SetValue(val + ":" + s)
+						t.SetCursor(5)
+						return nil
+					}
+				case 3:
+					if s > "5" {
+						return nil
+					}
+				case 4:
+				default:
+					return nil
+				}
+			} else if msg.Type == tea.KeyRunes {
+				return nil
+			}
+		}
+	}
+
 	for i := range m.inputs {
 		m.inputs[i], cmds[i] = m.inputs[i].Update(msg)
 	}
