@@ -7,7 +7,7 @@
 - [x] Operator icons
 - [x] Platforms
 - [x] Visual representation of stops
-  - [ ] Length represents time
+  - [x] Length represents time
 - [x] Richtung
 - [x] Separate results into multiple boxes
   - [ ] Separate results box into two sub boxes, left box contains vertical scrollable results, each in a box, right contains further details
