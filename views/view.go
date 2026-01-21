@@ -329,8 +329,7 @@ func (m model) renderSimpleConnection(c models.Connection, index int, width int)
 
 	departureDelay := formatDelay(c.Sections[firstVehicle].Departure.Delay)
 	arrivalDelay := formatDelay(c.Sections[firstVehicle].Arrival.Delay)
-
-	stopsLine := noStyle.Bold(true).Render("●" + strings.Repeat("──○", c.Transfers) + "──●")
+	stopsLine := noStyle.Bold(true).Render(renderStopsLine(c, 40))
 
 	platformOrWalk := ""
 	if len(c.FromData.Platform) > 0 {
@@ -383,4 +382,79 @@ func formatDelay(delay int) string {
 		return noStyle.Foreground(sbbRed).Bold(true).Render(fmt.Sprintf(" +%d", delay))
 	}
 	return ""
+}
+
+func renderStopsLine(c models.Connection, totalWidth int) string {
+	if len(c.Sections) == 0 {
+		return "●──●"
+	}
+
+	var sectionDurations []time.Duration
+	var totalSectionDuration time.Duration
+	for _, s := range c.Sections {
+		// Skip walking sections
+		if s.Journey == nil {
+			continue
+		}
+		dep := s.Departure.Departure.Time
+		arr := s.Arrival.Arrival.Time
+		if !dep.IsZero() && !arr.IsZero() {
+			dur := arr.Sub(dep)
+			sectionDurations = append(sectionDurations, dur)
+			totalSectionDuration += dur
+		}
+	}
+
+	if totalSectionDuration == 0 || len(sectionDurations) == 0 {
+		// Fallback to old equal distribution
+		return "●" + strings.Repeat("──○", c.Transfers) + "──●"
+	}
+
+	result := "●"
+	usedChars := 0
+	for i, secDur := range sectionDurations {
+		var lineChars int
+		if i == len(sectionDurations)-1 {
+			// Last section gets remaining chars to avoid rounding errors
+			lineChars = totalWidth - usedChars
+		} else {
+			proportion := float64(secDur) / float64(totalSectionDuration)
+			lineChars = int(proportion*float64(totalWidth) + 0.5)
+		}
+		if lineChars < 1 {
+			lineChars = 1
+		}
+		usedChars += lineChars
+
+		result += strings.Repeat("─", lineChars)
+		if i < len(sectionDurations)-1 {
+			result += "○"
+		} else {
+			result += "●"
+		}
+	}
+
+	return result
+}
+
+func parseDurationString(duration string) time.Duration {
+	// Format: "00d01:15:00" -> 1h15m
+	parts := strings.Split(duration, ":")
+	if len(parts) < 3 {
+		return 0
+	}
+
+	var days, hours, minutes, seconds int
+	if strings.Contains(parts[0], "d") {
+		fmt.Sscanf(parts[0], "%dd%d", &days, &hours)
+	} else {
+		fmt.Sscanf(parts[0], "%d", &hours)
+	}
+	fmt.Sscanf(parts[1], "%d", &minutes)
+	fmt.Sscanf(parts[2], "%d", &seconds)
+
+	return time.Duration(days)*24*time.Hour +
+		time.Duration(hours)*time.Hour +
+		time.Duration(minutes)*time.Minute +
+		time.Duration(seconds)*time.Second
 }

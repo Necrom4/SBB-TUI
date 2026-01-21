@@ -42,10 +42,12 @@ type Section struct {
 		Duration int `json:"duration"`
 	} `json:"walk"`
 	Departure struct {
-		Delay int `json:"delay"`
+		Departure SBBDateLayout `json:"departure"`
+		Delay     int           `json:"delay"`
 	} `json:"departure"`
 	Arrival struct {
-		Delay int `json:"delay"`
+		Arrival SBBDateLayout `json:"arrival"`
+		Delay   int           `json:"delay"`
 	} `json:"arrival"`
 }
 
