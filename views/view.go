@@ -15,13 +15,21 @@ import (
 )
 
 const (
-	// Layout constants
+	// Focusable item kinds
 	KindInput int = iota
 	KindButton
-	// Focusable item kinds
-	headerHeight    = 3
-	resultBoxHeight = 9
-	layoutPadding   = 2
+)
+
+const (
+	// Layout dimensions
+	headerHeight        = 3
+	resultBoxHeight     = 9
+	layoutPadding       = 2
+	borderSize          = 2
+	headerFixedWidth    = 82
+	resultBoxMargin     = 3
+	stopsLineFixedWidth = (borderSize * 2) + (resultBoxMargin * 2) + (2+5)*2 + 6 // borderSizes + resultBoxMargins + (space+time)*2 + delays
+	stopsLineMinWidth   = 10
 )
 
 var (
@@ -130,7 +138,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
-		inputWidth := ((m.width - layoutPadding - 82) / 2)
+		inputWidth := (m.width - layoutPadding - headerFixedWidth) / 2
 		m.inputs[0].Width = inputWidth
 		m.inputs[1].Width = inputWidth
 
@@ -219,8 +227,22 @@ func (m model) View() string {
 		noStyle.
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(sbbDarkRed).
-			Width(m.width-layoutPadding).Height(m.height-headerHeight-layoutPadding).Render(results),
+			Width(m.contentWidth()).
+			Height(m.resultsHeight()).
+			Render(results),
 	)
+}
+
+func (m model) contentWidth() int {
+	return max(m.width-layoutPadding, 0)
+}
+
+func (m model) resultsHeight() int {
+	return max(m.height-headerHeight-layoutPadding, 0)
+}
+
+func (m model) maxVisibleConnections() int {
+	return max(m.resultsHeight()/resultBoxHeight, 1)
 }
 
 func (m *model) updateInputs(msg tea.Msg) tea.Cmd {
@@ -232,15 +254,15 @@ func (m *model) updateInputs(msg tea.Msg) tea.Cmd {
 }
 
 func (m model) searchCmd() tea.Cmd {
+	maxConnections := m.maxVisibleConnections()
 	return func() tea.Msg {
-		nbBoxes := (m.height - headerHeight - layoutPadding) / resultBoxHeight
 		res, err := api.FetchConnections(
 			m.inputs[0].Value(),
 			m.inputs[1].Value(),
 			m.inputs[2].Value(),
 			m.inputs[3].Value(),
 			m.isArrivalTime,
-			nbBoxes,
+			maxConnections,
 		)
 		if err != nil {
 			return nil
@@ -287,6 +309,10 @@ func (m model) renderHeaderItem(idx int) string {
 	return style.Render(icon)
 }
 
+func (m model) resultBoxWidth() int {
+	return max((m.width-resultBoxMargin)/2, stopsLineMinWidth+stopsLineFixedWidth)
+}
+
 func (m model) renderResults() string {
 	if m.loading {
 		return "\n  Searching connections..."
@@ -297,7 +323,7 @@ func (m model) renderResults() string {
 	}
 
 	var boxes []string
-	boxWidth := (m.width - 4) / 2
+	boxWidth := m.resultBoxWidth()
 
 	for i, c := range m.connections {
 		boxes = append(boxes, m.renderSimpleConnection(c, i, boxWidth))
@@ -329,18 +355,20 @@ func (m model) renderSimpleConnection(c models.Connection, index int, width int)
 
 	departureDelay := formatDelay(c.Sections[firstVehicle].Departure.Delay)
 	arrivalDelay := formatDelay(c.Sections[firstVehicle].Arrival.Delay)
-	stopsLine := noStyle.Bold(true).Render(renderStopsLine(c, 40))
+
+	stopsLineWidth := max(width-stopsLineFixedWidth, stopsLineMinWidth)
+	stopsLine := noStyle.Bold(true).Render(renderStopsLine(c, stopsLineWidth))
 
 	platformOrWalk := ""
 	if len(c.FromData.Platform) > 0 {
-		platformOrWalk = "󱀓 " + noStyle.Render(c.FromData.Platform) + "      "
+		platformOrWalk = "󱀓 " + noStyle.Render(c.FromData.Platform)
 	} else if c.Sections[0].Walk != nil {
-		platformOrWalk = "      "
+		platformOrWalk = ""
 	}
 
 	duration := noStyle.Render(formatDuration(c.Duration))
 
-	content := fmt.Sprintf("\n  %s %s %s  %s\n\n  %s%s  %s  %s%s\n\n  %s%v\n",
+	content := fmt.Sprintf("\n  %s %s %s  %s\n\n  %s%s  %s  %s%s\n\n  %s%s%v\n",
 		vehicleIcon,
 		vehicleCategory,
 		company,
@@ -351,6 +379,7 @@ func (m model) renderSimpleConnection(c models.Connection, index int, width int)
 		arrival,
 		arrivalDelay,
 		platformOrWalk,
+		strings.Repeat(" ", width-(borderSize*2+resultBoxMargin*2+resultBoxMargin*2+3+5)),
 		duration,
 	)
 
@@ -406,11 +435,13 @@ func renderStopsLine(c models.Connection, totalWidth int) string {
 	}
 
 	if totalSectionDuration == 0 || len(sectionDurations) == 0 {
-		// Fallback to old equal distribution
+		// Fallback to equal distribution
 		return "●" + strings.Repeat("──○", c.Transfers) + "──●"
 	}
 
-	result := "●"
+	var sb strings.Builder
+	sb.WriteString("●")
+
 	usedChars := 0
 	for i, secDur := range sectionDurations {
 		var lineChars int
@@ -421,20 +452,18 @@ func renderStopsLine(c models.Connection, totalWidth int) string {
 			proportion := float64(secDur) / float64(totalSectionDuration)
 			lineChars = int(proportion*float64(totalWidth) + 0.5)
 		}
-		if lineChars < 1 {
-			lineChars = 1
-		}
+		lineChars = max(lineChars, 1)
 		usedChars += lineChars
 
-		result += strings.Repeat("─", lineChars)
+		sb.WriteString(strings.Repeat("─", lineChars))
 		if i < len(sectionDurations)-1 {
-			result += "○"
+			sb.WriteString("○")
 		} else {
-			result += "●"
+			sb.WriteString("●")
 		}
 	}
 
-	return result
+	return sb.String()
 }
 
 func parseDurationString(duration string) time.Duration {
