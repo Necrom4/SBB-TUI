@@ -27,6 +27,7 @@ const (
 	layoutPadding       = 2
 	borderSize          = 2
 	headerFixedWidth    = 82
+	marginToDimmedBox   = 1
 	resultBoxMargin     = 3
 	stopsLineFixedWidth = (borderSize * 2) + (resultBoxMargin * 2) + (2+5)*2 + 6 // borderSizes + resultBoxMargins + (space+time)*2 + delays
 	stopsLineMinWidth   = 10
@@ -221,7 +222,16 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m model) View() string {
 	header := m.renderHeader()
-	results := m.renderResults()
+	results := lipgloss.JoinHorizontal(lipgloss.Top,
+		noStyle.
+			Height(m.resultsHeight()).
+			Render(m.renderResults()),
+		noStyle.
+			Height(m.resultsHeight()).
+			Render(m.renderDetailedResult()),
+	)
+
+	m.renderResults()
 
 	return lipgloss.JoinVertical(lipgloss.Left,
 		header,
@@ -230,6 +240,7 @@ func (m model) View() string {
 			BorderForeground(sbbDarkRed).
 			Width(m.contentWidth()).
 			Height(m.resultsHeight()).
+			Padding(0, marginToDimmedBox).
 			Render(results),
 	)
 }
@@ -359,7 +370,7 @@ func (m model) renderHeaderItem(idx int) string {
 }
 
 func (m model) resultBoxWidth() int {
-	return max((m.width-resultBoxMargin)/2, stopsLineMinWidth+stopsLineFixedWidth)
+	return max((m.width-resultBoxMargin)/2, marginToDimmedBox+stopsLineMinWidth+stopsLineFixedWidth)
 }
 
 func (m model) renderResults() string {
@@ -379,6 +390,23 @@ func (m model) renderResults() string {
 	}
 
 	return lipgloss.JoinVertical(lipgloss.Left, boxes...)
+}
+
+func (m model) renderDetailedResult() string {
+	if len(m.connections) == 0 {
+		return ""
+	}
+
+	var box string
+	boxWidth := m.width - borderSize*4 - m.resultBoxWidth()
+
+	box = m.renderFullConnection(m.connections[m.resultIndex], boxWidth)
+
+	return box
+}
+
+func (m model) renderFullConnection(c models.Connection, width int) string {
+	return fmt.Sprintf("%v", m.resultIndex)
 }
 
 func (m model) renderSimpleConnection(c models.Connection, index int, width int) string {
