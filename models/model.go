@@ -6,10 +6,12 @@ import (
 	"time"
 )
 
-const sbbDateLayout = "2006-01-02T15:04:05-0700"
-
 type SBBDateLayout struct {
 	time.Time
+}
+
+func (st SBBDateLayout) Sub(other SBBDateLayout) time.Duration {
+	return st.Time.Sub(other.Time)
 }
 
 func (st *SBBDateLayout) UnmarshalJSON(b []byte) error {
@@ -17,12 +19,22 @@ func (st *SBBDateLayout) UnmarshalJSON(b []byte) error {
 	if s == "null" || s == "" {
 		return nil
 	}
-	t, err := time.Parse(sbbDateLayout, s)
+	t, err := time.Parse("2006-01-02T15:04:05-0700", s)
 	if err != nil {
 		return err
 	}
 	st.Time = t
 	return nil
+}
+
+type Departure struct {
+	Departure SBBDateLayout `json:"departure"`
+	Delay     int           `json:"delay"`
+}
+
+type Arrival struct {
+	Arrival SBBDateLayout `json:"arrival"`
+	Delay   int           `json:"delay"`
 }
 
 type Station struct {
@@ -39,16 +51,12 @@ type Section struct {
 		To       string `json:"to"`
 	} `json:"journey"`
 	Walk *struct {
-		Duration int `json:"duration"`
+		Duration  int       `json:"duration"`
+		Departure Departure `json:"departure"`
+		Arrival   Arrival   `json:"arrival"`
 	} `json:"walk"`
-	Departure struct {
-		Departure SBBDateLayout `json:"departure"`
-		Delay     int           `json:"delay"`
-	} `json:"departure"`
-	Arrival struct {
-		Arrival SBBDateLayout `json:"arrival"`
-		Delay   int           `json:"delay"`
-	} `json:"arrival"`
+	Departure Departure `json:"departure"`
+	Arrival   Arrival   `json:"arrival"`
 }
 
 type Connection struct {

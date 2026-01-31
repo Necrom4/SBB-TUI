@@ -412,7 +412,9 @@ func (m model) renderSimpleConnection(c models.Connection, index int, width int)
 	if len(c.FromData.Platform) > 0 {
 		platformOrWalk = "󱀓 " + noStyle.Render(c.FromData.Platform)
 	} else if c.Sections[0].Walk != nil {
-		platformOrWalk = ""
+		platformOrWalk = " " + noStyle.Render(
+			fmt.Sprintf("%vm", c.Sections[0].Arrival.Arrival.Sub(c.Sections[0].Departure.Departure).Minutes()),
+		)
 	}
 
 	duration := noStyle.Render(formatDuration(c.Duration))
