@@ -7,32 +7,32 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
-	"time"
+	"strings"
 
 	"sbb-tui/models"
 	"sbb-tui/utils"
 )
 
 func FetchConnections(from, to, date, timeStr string, isArrivalTime bool, limit int) ([]models.Connection, error) {
-	now := time.Now()
-
-	if date == "" {
-		date = now.Format("2006-01-02")
+	parts := []string{
+		fmt.Sprintf("from=%s", url.QueryEscape(from)),
+		fmt.Sprintf("to=%s", url.QueryEscape(to)),
 	}
 
-	if timeStr == "" {
-		timeStr = now.Format("15:04")
+	if date != "" {
+		parts = append(parts, fmt.Sprintf("date=%s", url.QueryEscape(date)))
 	}
 
-	apiURL := fmt.Sprintf(
-		"https://transport.opendata.ch/v1/connections?from=%s&to=%s&date=%s&time=%s&isArrivalTime=%s&limit=%v",
-		url.QueryEscape(from),
-		url.QueryEscape(to),
-		url.QueryEscape(date),
-		url.QueryEscape(timeStr),
-		strconv.Itoa(utils.Btoi(isArrivalTime)),
-		limit,
+	if timeStr != "" {
+		parts = append(parts, fmt.Sprintf("time=%s", url.QueryEscape(timeStr)))
+	}
+
+	parts = append(parts,
+		fmt.Sprintf("isArrivalTime=%s", strconv.Itoa(utils.Btoi(isArrivalTime))),
+		fmt.Sprintf("limit=%v", limit),
 	)
+
+	apiURL := "https://transport.opendata.ch/v1/connections?" + strings.Join(parts, "&")
 
 	resp, err := http.Get(apiURL)
 	if err != nil {
