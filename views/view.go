@@ -397,16 +397,12 @@ func (m model) renderDetailedResult() string {
 		return ""
 	}
 
-	var box string
 	boxWidth := m.width - borderSize*4 - m.resultBoxWidth()
-
-	box = m.renderFullConnection(m.connections[m.resultIndex], boxWidth)
-
-	return box
+	return m.renderFullConnection(m.connections[m.resultIndex], boxWidth)
 }
 
 func (m model) renderFullConnection(c models.Connection, width int) string {
-	return fmt.Sprintf("%v", m.resultIndex)
+	return focusedStyle.Width(width).Height(m.resultsHeight() - borderSize).Render(fmt.Sprintf("%v", m.resultIndex))
 }
 
 func (m model) renderSimpleConnection(c models.Connection, index int, width int) string {
@@ -420,7 +416,7 @@ func (m model) renderSimpleConnection(c models.Connection, index int, width int)
 
 	vehicleIcon := noStyle.Background(sbbBlue).Foreground(sbbWhite).Render("  ")
 	vehicleCategory := noStyle.Background(sbbRed).Foreground(sbbWhite).Bold(true).
-		Render(c.Sections[firstVehicle].Journey.Category + c.Sections[firstVehicle].Journey.Number)
+		Render(c.Sections[firstVehicle].Journey.Category + " " + c.Sections[firstVehicle].Journey.Number)
 	company := noStyle.Background(sbbWhite).Foreground(sbbBlack).
 		Render(c.Sections[firstVehicle].Journey.Operator)
 	endStop := noStyle.Render(c.Sections[firstVehicle].Journey.To)
