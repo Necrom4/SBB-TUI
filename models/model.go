@@ -28,13 +28,17 @@ func (st *SBBDateLayout) UnmarshalJSON(b []byte) error {
 }
 
 type Departure struct {
+	Station   Station       `json:"station"`
 	Departure SBBDateLayout `json:"departure"`
+	Platform  string        `json:"platform"`
 	Delay     int           `json:"delay"`
 }
 
 type Arrival struct {
-	Arrival SBBDateLayout `json:"arrival"`
-	Delay   int           `json:"delay"`
+	Station  Station       `json:"station"`
+	Arrival  SBBDateLayout `json:"arrival"`
+	Platform string        `json:"platform"`
+	Delay    int           `json:"delay"`
 }
 
 type Station struct {

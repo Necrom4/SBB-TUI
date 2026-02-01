@@ -22,18 +22,39 @@ const (
 
 const (
 	// Layout dimensions
-	headerHeight        = 3
-	resultBoxHeight     = 9
-	layoutPadding       = 2
-	borderSize          = 2
-	headerFixedWidth    = 82
-	marginToDimmedBox   = 1
-	resultBoxMargin     = 3
-	stopsLineFixedWidth = (borderSize * 2) + (resultBoxMargin * 2) + (2+5)*2 + 6 // borderSizes + resultBoxMargins + (space+time)*2 + delays
+	borderSize     = 2
+	hdrHeight      = 3
+	hdrMinWidth    = 82
+	hdrElmtPadd    = 2
+	rsltMrgn       = 1
+	smplConnHeight = 9
+	smplConnMrgn   = 3
+
+	stopsLineFixedWidth = (borderSize * 2) + (smplConnMrgn * 2) + (2+5)*2 + 6
 	stopsLineMinWidth   = 10
+
+	fullConnPaddH = 3
+	fullConnPaddV = 1
+)
+
+const (
+	// Icons
+	filledDot = "●"
+	hollowDot = "○"
+	horzLine  = "─"
+	vertLine  = "│"
+
+	arrIcon  = "󰗔"
+	dptIcon  = ""
+	pltIcon  = "󱀓"
+	srchIcon = ""
+	swpIcon  = ""
+	vhcIcon  = ""
+	wlkIcon  = ""
 )
 
 var (
+	// Colors
 	sbbWhite      = lipgloss.Color("#FFFFFF")
 	sbbMidWhite   = lipgloss.Color("#F6F6F6")
 	sbbDarkWhite  = lipgloss.Color("#DDDDDD")
@@ -51,6 +72,7 @@ var (
 )
 
 var (
+	// Styles
 	noStyle = lipgloss.NewStyle()
 
 	focusedStyle = lipgloss.NewStyle().
@@ -62,6 +84,11 @@ var (
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(sbbMidGray).
 			Padding(0, 1)
+
+	detailedResultStyle = lipgloss.NewStyle().
+				Border(lipgloss.RoundedBorder()).
+				BorderForeground(sbbRed).
+				Padding(fullConnPaddV, fullConnPaddH)
 
 	titleStyle = lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
@@ -77,7 +104,10 @@ type focusable struct {
 	index int
 }
 
-type DataMsg []models.Connection
+type DataMsg struct {
+	connections []models.Connection
+	err         error
+}
 
 type model struct {
 	width, height int
@@ -88,9 +118,12 @@ type model struct {
 	isArrivalTime bool
 	connections   []models.Connection
 	loading       bool
+	errorMsg      string
+	searched      bool
 }
 
 func InitialModel() model {
+	// Define input prompts
 	m := model{
 		headerOrder: []focusable{
 			{KindInput, "from", 0},
@@ -122,6 +155,7 @@ func InitialModel() model {
 			t.Placeholder = now.Format("2006-01-02")
 			t.Prompt = " "
 			t.Width = 12
+			t.CharLimit = 10
 		case 3:
 			t.Placeholder = now.Format("15:04")
 			t.Prompt = " "
@@ -136,11 +170,12 @@ func InitialModel() model {
 func (m model) Init() tea.Cmd { return textinput.Blink }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// Define keymaps
 	switch msg := msg.(type) {
 
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
-		inputWidth := (m.width - layoutPadding - headerFixedWidth) / 2
+		inputWidth := (m.width - hdrElmtPadd - hdrMinWidth) / 2
 		m.inputs[0].Width = inputWidth
 		m.inputs[1].Width = inputWidth
 
@@ -156,7 +191,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case "enter":
+			if err := m.validateInputs(); err != "" {
+				m.errorMsg = err
+				return m, nil
+			}
 			m.loading = true
+			m.connections = nil
+			m.errorMsg = ""
+			m.searched = true
 			return m, m.searchCmd()
 
 		case " ":
@@ -169,12 +211,19 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "isArrivalTime":
 				m.isArrivalTime = !m.isArrivalTime
 			case "search":
+				if err := m.validateInputs(); err != "" {
+					m.errorMsg = err
+					return m, nil
+				}
 				m.loading = true
+				m.connections = nil
+				m.errorMsg = ""
+				m.searched = true
 				return m, m.searchCmd()
 			}
 
-		case "tab", "shift+tab", "left", "right":
-			if msg.String() == "left" || msg.String() == "shift+tab" {
+		case "tab", "shift+tab":
+			if msg.String() == "shift+tab" {
 				m.tabIndex--
 			} else {
 				m.tabIndex++
@@ -211,8 +260,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case DataMsg:
 		m.loading = false
-		m.connections = msg
+		if msg.err != nil {
+			m.errorMsg = "Failed to fetch connections. Check your internet connection."
+			return m, nil
+		}
+		m.connections = msg.connections
 		m.resultIndex = 0
+		if len(m.connections) == 0 {
+			m.errorMsg = "No connections found for the specified route."
+		}
 		return m, nil
 	}
 
@@ -231,8 +287,6 @@ func (m model) View() string {
 			Render(m.renderDetailedResult()),
 	)
 
-	m.renderResults()
-
 	return lipgloss.JoinVertical(lipgloss.Left,
 		header,
 		noStyle.
@@ -240,21 +294,21 @@ func (m model) View() string {
 			BorderForeground(sbbDarkRed).
 			Width(m.contentWidth()).
 			Height(m.resultsHeight()).
-			Padding(0, marginToDimmedBox).
+			Padding(0, rsltMrgn).
 			Render(results),
 	)
 }
 
 func (m model) contentWidth() int {
-	return max(m.width-layoutPadding, 0)
+	return max(m.width-hdrElmtPadd, 0)
 }
 
 func (m model) resultsHeight() int {
-	return max(m.height-headerHeight-layoutPadding, 0)
+	return max(m.height-hdrHeight-hdrElmtPadd, 0)
 }
 
 func (m model) maxVisibleConnections() int {
-	return max(m.resultsHeight()/resultBoxHeight, 1)
+	return max(m.resultsHeight()/smplConnHeight, 1)
 }
 
 func (m *model) updateInputs(msg tea.Msg) tea.Cmd {
@@ -264,13 +318,67 @@ func (m *model) updateInputs(msg tea.Msg) tea.Cmd {
 	case tea.KeyMsg:
 		// Check key input in input fields
 		switch m.headerOrder[m.tabIndex].id {
+		case "date":
+			t := &m.inputs[2]
+			s := msg.String()
+			val := t.Value()
+
+			if msg.Type == tea.KeyBackspace {
+				if len(val) == 5 || len(val) == 8 {
+					t.SetValue(val[:len(val)-1])
+					return nil
+				}
+			}
+
+			if len(s) == 1 && s >= "0" && s <= "9" {
+				switch len(val) {
+				case 0:
+					if s > "2" {
+						return nil
+					}
+				case 1:
+					if val == "2" && s > "9" {
+						return nil
+					}
+				case 2, 3:
+				case 4:
+					t.SetValue(val + "-" + s)
+					t.SetCursor(len(val) + 2)
+					return nil
+				case 5:
+					if val[5] == '0' && s == "0" {
+						return nil
+					}
+					if val[5] == '1' && s > "2" {
+						return nil
+					}
+				case 6:
+				case 7:
+					t.SetValue(val + "-" + s)
+					t.SetCursor(len(val) + 2)
+					return nil
+				case 8:
+					if val[8] == '0' && s == "0" {
+						return nil
+					}
+					if val[8] == '3' && s > "1" {
+						return nil
+					}
+				case 9:
+				default:
+					return nil
+				}
+			} else if msg.Type == tea.KeyRunes {
+				return nil
+			}
+
 		case "time":
 			t := &m.inputs[3]
 			s := msg.String()
 			val := t.Value()
 
 			if msg.Type == tea.KeyBackspace && len(val) == 3 {
-				t.SetValue(val[:1]) // Delete the colon AND the digit before it
+				t.SetValue(val[:1])
 				return nil
 			}
 
@@ -288,11 +396,9 @@ func (m *model) updateInputs(msg tea.Msg) tea.Cmd {
 					}
 				// Add `:` when typing third digit
 				case 2:
-					if s >= "0" && s <= "9" {
-						t.SetValue(val + ":" + s)
-						t.SetCursor(5)
-						return nil
-					}
+					t.SetValue(val + ":" + s)
+					t.SetCursor(5)
+					return nil
 				case 3:
 					if s > "5" {
 						return nil
@@ -313,6 +419,16 @@ func (m *model) updateInputs(msg tea.Msg) tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
+func (m model) validateInputs() string {
+	if m.inputs[0].Value() == "" {
+		return "Please enter a departure station."
+	}
+	if m.inputs[1].Value() == "" {
+		return "Please enter an arrival station."
+	}
+	return ""
+}
+
 func (m model) searchCmd() tea.Cmd {
 	maxConnections := m.maxVisibleConnections()
 	return func() tea.Msg {
@@ -324,10 +440,7 @@ func (m model) searchCmd() tea.Cmd {
 			m.isArrivalTime,
 			maxConnections,
 		)
-		if err != nil {
-			return nil
-		}
-		return DataMsg(res)
+		return DataMsg{connections: res, err: err}
 	}
 }
 
@@ -356,21 +469,21 @@ func (m model) renderHeaderItem(idx int) string {
 	icon := " "
 	switch item.id {
 	case "swap":
-		icon = ""
+		icon = swpIcon
 	case "isArrivalTime":
 		if m.isArrivalTime {
-			icon = "󰗔"
+			icon = arrIcon
 		} else {
-			icon = ""
+			icon = dptIcon
 		}
 	case "search":
-		icon = ""
+		icon = srchIcon
 	}
 	return style.Render(icon)
 }
 
 func (m model) resultBoxWidth() int {
-	return max((m.width-resultBoxMargin)/2, marginToDimmedBox+stopsLineMinWidth+stopsLineFixedWidth)
+	return max((m.width-smplConnMrgn)/2, rsltMrgn+stopsLineMinWidth+stopsLineFixedWidth)
 }
 
 func (m model) renderResults() string {
@@ -378,7 +491,14 @@ func (m model) renderResults() string {
 		return "\n  Searching connections..."
 	}
 
+	if m.errorMsg != "" {
+		return "\n  " + noStyle.Foreground(sbbRed).Render(m.errorMsg)
+	}
+
 	if len(m.connections) == 0 {
+		if m.searched {
+			return "\n  No connections found."
+		}
 		return "\n  Enter stations above to see timetables"
 	}
 
@@ -402,7 +522,158 @@ func (m model) renderDetailedResult() string {
 }
 
 func (m model) renderFullConnection(c models.Connection, width int) string {
-	return focusedStyle.Width(width).Height(m.resultsHeight() - borderSize).Render(fmt.Sprintf("%v", m.resultIndex))
+	var lines []string
+	innerWidth := width - borderSize - (fullConnPaddH * 2)
+
+	for i, section := range c.Sections {
+		isFirst := i == 0
+		isLast := i == len(c.Sections)-1
+
+		if section.Walk != nil {
+			lines = append(lines, m.renderWalkSection(section)...)
+		} else if section.Journey != nil {
+			lines = append(lines, m.renderJourneySection(section, innerWidth, isFirst, isLast)...)
+		}
+
+		if !isLast {
+			lines = append(lines, "", "")
+		}
+	}
+
+	content := strings.Join(lines, "\n")
+	boxHeight := m.resultsHeight() - borderSize - (fullConnPaddV * 2)
+	return detailedResultStyle.Width(width).Height(boxHeight).Render(content)
+}
+
+func (m model) renderJourneySection(section models.Section, width int, isFirst, isLast bool) []string {
+	var lines []string
+
+	const timeCol = 5
+	const delayCol = 4
+	const symbolCol = 5
+	const platformCol = 10
+
+	depTime := section.Departure.Departure.Local().Format("15:04")
+	depDelay := section.Departure.Delay
+	depStation := section.Departure.Station.Name
+	depPlatform := section.Departure.Platform
+
+	depDot := hollowDot
+	if isFirst {
+		depDot = filledDot
+	}
+
+	depLine := m.formatStationLine(depTime, depDelay, depDot, depStation, depPlatform, width, timeCol, delayCol, symbolCol, true)
+	lines = append(lines, depLine)
+
+	indent := strings.Repeat(" ", timeCol+delayCol)
+	spacingLine := fmt.Sprintf("%s  %s", indent, vertLine)
+	lines = append(lines, spacingLine)
+
+	vehicleIcon := noStyle.Background(sbbBlue).Foreground(sbbWhite).Render(" " + vhcIcon + " ")
+	vehicleCategory := noStyle.Background(sbbRed).Foreground(sbbWhite).Bold(true).
+		Render(section.Journey.Category + " " + section.Journey.Number)
+	company := noStyle.Background(sbbWhite).Foreground(sbbBlack).
+		Render(section.Journey.Operator)
+	vehicleLine := fmt.Sprintf("%s  %s  %s %s %s", indent, vertLine, vehicleIcon, vehicleCategory, company)
+	lines = append(lines, vehicleLine)
+
+	destLine := fmt.Sprintf("%s  %s   → %s", indent, vertLine, section.Journey.To)
+	lines = append(lines, destLine)
+
+	lines = append(lines, spacingLine)
+
+	arrTime := section.Arrival.Arrival.Local().Format("15:04")
+	arrDelay := section.Arrival.Delay
+	arrStation := section.Arrival.Station.Name
+	arrPlatform := section.Arrival.Platform
+
+	arrSymbol := vertLine
+	if isLast {
+		arrSymbol = filledDot
+	}
+
+	arrLine := m.formatStationLine(arrTime, arrDelay, arrSymbol, arrStation, arrPlatform, width, timeCol, delayCol, symbolCol, false)
+	lines = append(lines, arrLine)
+
+	return lines
+}
+
+func (m model) renderWalkSection(section models.Section) []string {
+	var lines []string
+
+	walkDuration := ""
+	if section.Walk != nil {
+		dur := section.Walk.Duration
+		if dur > 0 {
+			walkDuration = fmt.Sprintf("%d min", dur/60)
+		} else {
+			depTime := section.Departure.Departure.Time
+			arrTime := section.Arrival.Arrival.Time
+			if !depTime.IsZero() && !arrTime.IsZero() {
+				walkDuration = fmt.Sprintf("%d min", int(arrTime.Sub(depTime).Minutes()))
+			}
+		}
+	}
+
+	walkLine := fmt.Sprintf("            %s", walkDuration)
+	lines = append(lines, walkLine)
+
+	return lines
+}
+
+func (m model) formatStationLine(timeStr string, delay int, symbol, station, platform string, width, timeCol, delayCol, symbolCol int, bold bool) string {
+	textStyle := noStyle
+	if bold {
+		textStyle = noStyle.Bold(true)
+	}
+
+	timePart := textStyle.Render(timeStr)
+
+	delayPart := ""
+	if delay > 0 {
+		delayStr := fmt.Sprintf("+%d", delay)
+		delayPart = noStyle.Foreground(sbbRed).Bold(true).Render(fmt.Sprintf("%*s", delayCol, delayStr))
+	} else {
+		delayPart = strings.Repeat(" ", delayCol)
+	}
+
+	symbolPart := fmt.Sprintf("  %s  ", symbol)
+
+	platformPart := ""
+	platformVisibleLen := 0
+	if platform != "" {
+		platformPart = textStyle.Render(fmt.Sprintf("%s %s", pltIcon, platform))
+		platformVisibleLen = len(platform) + 3
+	}
+
+	fixedWidth := timeCol + delayCol + symbolCol + platformVisibleLen
+	availableForStation := max(width-fixedWidth-1, 5)
+
+	truncatedStation := truncateString(station, availableForStation)
+	stationPart := textStyle.Render(truncatedStation)
+
+	stationLen := len(truncatedStation)
+	padding := max(availableForStation-stationLen, 1)
+
+	if platformPart != "" {
+		return fmt.Sprintf("%s%s%s%s%s%s",
+			timePart, delayPart, symbolPart, stationPart, strings.Repeat(" ", padding), platformPart)
+	}
+	return fmt.Sprintf("%s%s%s%s", timePart, delayPart, symbolPart, stationPart)
+}
+
+func truncateString(s string, maxLen int) string {
+	if maxLen <= 0 {
+		return ""
+	}
+	if maxLen <= 3 {
+		return s[:min(len(s), maxLen)]
+	}
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen-3] + "..."
 }
 
 func (m model) renderSimpleConnection(c models.Connection, index int, width int) string {
@@ -414,7 +685,7 @@ func (m model) renderSimpleConnection(c models.Connection, index int, width int)
 		}
 	}
 
-	vehicleIcon := noStyle.Background(sbbBlue).Foreground(sbbWhite).Render("  ")
+	vehicleIcon := noStyle.Background(sbbBlue).Foreground(sbbWhite).Render(" " + vhcIcon + " ")
 	vehicleCategory := noStyle.Background(sbbRed).Foreground(sbbWhite).Bold(true).
 		Render(c.Sections[firstVehicle].Journey.Category + " " + c.Sections[firstVehicle].Journey.Number)
 	company := noStyle.Background(sbbWhite).Foreground(sbbBlack).
@@ -434,14 +705,16 @@ func (m model) renderSimpleConnection(c models.Connection, index int, width int)
 
 	platformOrWalk := ""
 	if len(c.FromData.Platform) > 0 {
-		platformOrWalk = "󱀓 " + noStyle.Render(c.FromData.Platform)
+		platformOrWalk = pltIcon + " " + noStyle.Render(c.FromData.Platform)
 	} else if c.Sections[0].Walk != nil {
-		platformOrWalk = " " + noStyle.Render(
+		platformOrWalk = wlkIcon + " " + noStyle.Render(
 			fmt.Sprintf("%vm", c.Sections[0].Arrival.Arrival.Sub(c.Sections[0].Departure.Departure).Minutes()),
 		)
 	}
 
 	duration := noStyle.Render(formatDuration(c.Duration))
+
+	bottomLinePadding := max(width-(borderSize*2+smplConnMrgn*2+smplConnMrgn*2+3+5), 1)
 
 	content := fmt.Sprintf("\n  %s %s %s  %s\n\n  %s%s  %s  %s%s\n\n  %s%s%v\n",
 		vehicleIcon,
@@ -454,7 +727,7 @@ func (m model) renderSimpleConnection(c models.Connection, index int, width int)
 		arrival,
 		arrivalDelay,
 		platformOrWalk,
-		strings.Repeat(" ", width-(borderSize*2+resultBoxMargin*2+resultBoxMargin*2+3+5)),
+		strings.Repeat(" ", bottomLinePadding),
 		duration,
 	)
 
@@ -490,7 +763,7 @@ func formatDelay(delay int) string {
 
 func renderStopsLine(c models.Connection, totalWidth int) string {
 	if len(c.Sections) == 0 {
-		return "●──●"
+		return filledDot + horzLine + horzLine + filledDot
 	}
 
 	var sectionDurations []time.Duration
@@ -511,11 +784,11 @@ func renderStopsLine(c models.Connection, totalWidth int) string {
 
 	if totalSectionDuration == 0 || len(sectionDurations) == 0 {
 		// Fallback to equal distribution
-		return "●" + strings.Repeat("──○", c.Transfers) + "──●"
+		return filledDot + strings.Repeat(horzLine+horzLine+hollowDot, c.Transfers) + horzLine + horzLine + filledDot
 	}
 
 	var sb strings.Builder
-	sb.WriteString("●")
+	sb.WriteString(filledDot)
 
 	usedChars := 0
 	for i, secDur := range sectionDurations {
@@ -530,35 +803,13 @@ func renderStopsLine(c models.Connection, totalWidth int) string {
 		lineChars = max(lineChars, 1)
 		usedChars += lineChars
 
-		sb.WriteString(strings.Repeat("─", lineChars))
+		sb.WriteString(strings.Repeat(horzLine, lineChars))
 		if i < len(sectionDurations)-1 {
-			sb.WriteString("○")
+			sb.WriteString(hollowDot)
 		} else {
-			sb.WriteString("●")
+			sb.WriteString(filledDot)
 		}
 	}
 
 	return sb.String()
-}
-
-func parseDurationString(duration string) time.Duration {
-	// Format: "00d01:15:00" -> 1h15m
-	parts := strings.Split(duration, ":")
-	if len(parts) < 3 {
-		return 0
-	}
-
-	var days, hours, minutes, seconds int
-	if strings.Contains(parts[0], "d") {
-		fmt.Sscanf(parts[0], "%dd%d", &days, &hours)
-	} else {
-		fmt.Sscanf(parts[0], "%d", &hours)
-	}
-	fmt.Sscanf(parts[1], "%d", &minutes)
-	fmt.Sscanf(parts[2], "%d", &seconds)
-
-	return time.Duration(days)*24*time.Hour +
-		time.Duration(hours)*time.Hour +
-		time.Duration(minutes)*time.Minute +
-		time.Duration(seconds)*time.Second
 }
