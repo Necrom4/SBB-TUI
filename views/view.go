@@ -8,6 +8,7 @@ import (
 
 	"sbb-tui/api"
 	"sbb-tui/models"
+	"sbb-tui/utils"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
@@ -599,6 +600,13 @@ func (m model) renderJourneySection(section models.Section, width int, isFirst, 
 	return lines
 }
 
+func getGoogleMapsURL(s models.Section) string {
+	dep := s.Departure.Station.Coordinate
+	arr := s.Arrival.Station.Coordinate
+	return fmt.Sprintf("https://www.google.com/maps/dir/?api=1&origin=%f,%f&destination=%f,%f&travelmode=walking",
+		dep.X, dep.Y, arr.X, arr.Y)
+}
+
 func (m model) renderWalkSection(section models.Section) []string {
 	var lines []string
 
@@ -614,9 +622,12 @@ func (m model) renderWalkSection(section models.Section) []string {
 				walkDuration = fmt.Sprintf("%d min", int(arrTime.Sub(depTime).Minutes()))
 			}
 		}
+		url := getGoogleMapsURL(section)
+
+		walkDuration = utils.RenderLink(walkDuration, url)
 	}
 
-	walkLine := fmt.Sprintf("            %s", walkDuration)
+	walkLine := fmt.Sprintf("           %s %s", wlkIcon, walkDuration)
 	lines = append(lines, walkLine)
 
 	return lines

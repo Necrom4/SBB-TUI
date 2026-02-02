@@ -27,6 +27,11 @@ func (st *SBBDateLayout) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
+type Coordinate struct {
+	X float64 `json:"x"`
+	Y float64 `json:"y"`
+}
+
 type Departure struct {
 	Station   Station       `json:"station"`
 	Departure SBBDateLayout `json:"departure"`
@@ -42,9 +47,8 @@ type Arrival struct {
 }
 
 type Station struct {
-	Name        string  `json:"name"`
-	CoordinateX float64 `json:"coordinate.x"`
-	CoordinateY float64 `json:"coordinate.y"`
+	Name       string     `json:"name"`
+	Coordinate Coordinate `json:"coordinate"`
 }
 
 type Section struct {
