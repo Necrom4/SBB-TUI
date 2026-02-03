@@ -8,6 +8,8 @@
 
 version: 2
 
+project_name: SBB-TUI
+
 before:
   hooks:
     # You may remove this if you don't use go modules.
@@ -45,9 +47,22 @@ changelog:
       - "^docs:"
       - "^test:"
 
-release:
-  footer: >-
-
-    ---
-
-    Released by [GoReleaser](https://github.com/goreleaser/goreleaser).
+brews:
+  - name: sbb-tui
+    commit_author:
+      name: Necrom4
+      email: diogofpombeiro@gmail.com
+    commit_msg_template: "Brew formula update for {{ .ProjectName }} version {{ .Tag }}"
+    directory: Formula
+    description: "Swiss SBB/CFF/FFS app for the terminal"
+    license: "MIT"
+    install: |
+      bin.install "sbb-tui"
+    test: |
+      system "#{bin}/sbb-tui --version"
+    # Repository to push the generated files to.
+    repository:
+      owner: Necrom4
+      name: homebrew-tap
+      branch: main
+      token: "{{ .Env.GH_TOKEN }}"

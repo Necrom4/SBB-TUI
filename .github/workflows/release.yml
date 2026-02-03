@@ -1,0 +1,32 @@
+name: release
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  main:
+    runs-on: ubuntu-latest
+    environment:
+      name: Release
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Semantic Release
+        uses: cycjimmy/semantic-release-action@v4
+        with:
+          extra_plugins: |
+            @semantic-release/git
+            @semantic-release/exec
+            @semantic-release/changelog
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+      - name: Run GoReleaser
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
+          HOMEBREW_GITHUB_API_TOKEN: ${{ secrets.GH_TOKEN }}
+        run: |
+          curl -sL https://git.io/goreleaser | bash
